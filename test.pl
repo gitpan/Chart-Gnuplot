@@ -4,7 +4,8 @@ use Chart::GnuPlot;
 $loaded = 1;
 print "ok 1\n";
 
-#$ENV{'DEBUG'} = 1;
+# set this to see what's going on
+# $ENV{'DEBUG'} = 1;
 
 my( $record, $data );
 
@@ -53,6 +54,7 @@ my $settings =	{
 			'colours'	=> $colours,
 			'ytics'		=> 50,
 			'mytics'	=> 5,
+			'yrange'	=> [ '*', 1100 ],
 		};
 
 my $gp = Chart::GnuPlot -> new();

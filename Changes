@@ -3,3 +3,8 @@ Revision history for Perl extension Chart::GnuPlot.
 0.01  Wed Jul 15 11:51:31 1998
 	- original version; created by h2xs 1.18
 
+0.02  Sun Nov 22 20:00:00 1998
+	- tidied some things up
+	- added the following functions; (see perldoc)
+          xrange yrange xformat yformat xyformat set
+

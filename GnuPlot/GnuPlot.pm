@@ -30,7 +30,7 @@ sub plot {
 	my @parts = qw( Settings Titles Plot );
 	my %split_set =	(
 				'terminal'	=> [ qw( size grid_set x_label_off y_label_off colours ), map( $_ . '_font', 'text', @$titles ) ],
-				'Settings'	=> [ qw( full_file timefmt xformat grid key ) ],
+				'Settings'	=> [ qw( full_file timefmt xformat yformat xyformat grid key set xrange yrange ) ],
 				'Titles'	=> [ @$titles ],
 				'Plot'		=> [ qw( data plots full_file ) ],
 			);
@@ -78,13 +78,13 @@ sub plot {
 
 	die "unable to open output '$plot_file' ($!)" unless ( open OUTPUT, ">$plot_file" );
 	my $script = join( "\n", @script, '' );
-	warn $script if ( exists( $ENV{'DEBUG'} ) && $ENV{'DEBUG'} );
+	warn $script, "\n" if ( exists( $ENV{'DEBUG'} ) && $ENV{'DEBUG'} );
 	print OUTPUT $script;
 	close OUTPUT;
 
-	my $gif = &_run_plot( $settings -> {'gnu_exe'}, $plot_file, $image_file );
-	unlink( $plot_file, @$data_file, $image_file );
-	return ( $gif, $module -> extension() );
+	my $image = &_run_plot( $settings -> {'gnu_exe'}, $plot_file, $image_file );
+	unlink( $plot_file, @$data_file, $image_file ) unless ( exists( $ENV{'DEBUG'} ) && $ENV{'DEBUG'} );
+	return ( $image, $module -> extension() );
 }
 
 ######################
@@ -94,8 +94,9 @@ sub _run_plot {
 	my $plot = shift;
 	my $image = shift;
 	my $command = "$gnu_exe $plot";
+	warn $command, "\n" if ( exists( $ENV{'DEBUG'} ) && $ENV{'DEBUG'} );
 	die "can't find gnuplot '$gnu_exe'" unless -x $gnu_exe;
-	my $result = system( $command );
+	system( $command );
 	die "file '$image' wasn't found" unless -f $image;
 	die "unable to open image file '$image' ($!)" unless open( INPUT, "<$image" );
 	binmode INPUT;

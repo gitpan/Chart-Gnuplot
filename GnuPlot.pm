@@ -1,17 +1,18 @@
 package Chart::GnuPlot;
 
+use Config;
 use strict;
 use vars qw($VERSION);
 use Chart::GnuPlot::ModArgs;
 use Chart::GnuPlot::GnuPlot;
 
-$VERSION = '0.01';
+$VERSION = '0.02';
 
 my @titles = qw( title xtitle ytitle bl_label br_label tl_label tr_label );
 
 my( $dos, $gnu_exe );
 
-if ( exists $ENV{'WINBOOTDIR'} ) {
+if ( $Config{'archname'} eq 'MSWin32' ) {
 	$dos = 1;
 	$gnu_exe = 'D:\\GNUPLOT\\WGNUPLOT.EXE';
 } else {
@@ -24,11 +25,17 @@ my $defaults = 	{
 			'terminal'	=> 'gif',
 			'data'		=> [],
 			'plots'		=> [],
+			'set'		=> [],
 			'size'		=> '',
 			'file_name'	=> '',
 			'temp_dir'	=> '/tmp',
 			'timefmt'	=> '',
 			'xformat'	=> '',
+			'yformat'	=> '',
+			'xrange'	=> [],
+			'yrange'	=> [],
+			'xformat'	=> '',
+			'xyformat'	=> '',
 			'grid'		=> 0,
 			'key'		=> 'bottom right',
 			'bl_label'	=> '',
@@ -114,8 +121,6 @@ sub new {
   size            size of output image (relative to terminal type).
   file_name       filename to use for the cache files.
   temp_dir        directory to place the cache files.
-  timefmt         a gnuplot time format picture.
-  xformat         as above.
   grid            on (1) or off(0).
   key             ie. 'bottom right'
                   (this uses gnuplot 'set key' syntax).
@@ -137,8 +142,21 @@ sub new {
   lmargin         left margin.
   timefmt         the date picture of the datasets
                   (this uses gnuplot 'set timefmt' syntax)
-  xformat         the format dates will be shown on the x axis
+  xrange          this value should be a reference to an array of two
+                  values [ minimum, maximum ]. Either of these can be '*'.
+		  If the range is a date, it should be in the same
+		  format as timefmt.
+  yrange          see xrange.
+  xformat         the format values will be shown on the x axis
                   (this uses gnuplot 'set format x' syntax)
+  yformat         the format values will be shown on the y axis
+                  (this uses gnuplot 'set format y' syntax)
+  xyformat        the format values will be shown on the both axis
+                  (this uses gnuplot 'set format' syntax)
+  set             this should be a reference to an array containing
+                  a list of 'set' commands to pass gnuplot.
+		  The main use for this is to access options that I
+		  haven't put a wrapper around :-)
 
 =cut
 
@@ -158,11 +176,7 @@ sub plot {
 ###############################
 
 sub _uniq_name {
-#	if ( $dos ) {
-#		return 'output';
-#	} else {
-		return join( '_', $$, time );
-#	}
+	return join( '_', $$, time );
 }
 
 sub _add_title_stuff {
@@ -176,6 +190,16 @@ sub _add_title_stuff {
 		$defaults -> { $temp . '_font' } = undef;
 	}
 }
+
+=head1 NOTES
+
+  If the enviroment variable 'DEBUG' is set ($ENV{'DEBUG'} = 1)
+  the gnuplot command file  & gnuplot command line options will be
+  output to stderr.
+
+  Unfortunately I haven't been able to trap the error messages from
+  Gnuplot yet, If the gif doesn't appear, try setting DEBUG & run
+  the generated script manually.
 
 =head1 AUTHOR
 
