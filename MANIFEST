@@ -1,0 +1,15 @@
+Changes
+GnuPlot.pm
+GnuPlot/GnuPlot.pm
+GnuPlot/Plot.pm
+GnuPlot/ModArgs.pm
+GnuPlot/Plot/Data.pm
+GnuPlot/Plot/Style.pm
+GnuPlot/Settings.pm
+GnuPlot/Terminal/gif.pm
+GnuPlot/Titles.pm
+GnuPlot/Tools.pm
+Makefile.PL
+MANIFEST
+test.pl
+README
