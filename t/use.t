@@ -7,6 +7,3 @@ BEGIN
 	use_ok('Chart::Gnuplot');
 	use_ok('Chart::Gnuplot::Util');
 }
-
-###################### Tests ######################
-

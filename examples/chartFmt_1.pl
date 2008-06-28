@@ -4,7 +4,7 @@ use Chart::Gnuplot;
 
 my $chart = Chart::Gnuplot->new(
     output => 'gallery/chartFmt_1.png',
-	title  => 'My chart title',     # chart title
+    title  => 'My chart title',     # chart title
 );
 
 my $data = Chart::Gnuplot::DataSet->new(

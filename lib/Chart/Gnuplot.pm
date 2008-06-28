@@ -3,9 +3,9 @@ use strict;
 use vars qw($VERSION);
 use Carp;
 use File::Copy;
-use File::Temp qw(tempfile tempdir);
+use File::Temp qw(tempdir);
 use Chart::Gnuplot::Util qw(_lineType);
-$VERSION = 0.01;
+$VERSION = 0.02;
 
 # Constructor
 sub new
@@ -660,20 +660,20 @@ sub convert
     my ($self, $imgfmt) = @_;
     return($self) if (!-e $self->{output});
 
+    # Generate temp file
+    my $temp = "$self->{_script}.tmp";
+    move($self->{output}, $temp);
+
     if ($self->{terminal} =~ /^post/ && $imgfmt eq 'pdf')
     {
-        system("ps2pdf $self->{output} $self->{output}");
+        system("ps2pdf $temp $temp".".$imgfmt");
     }
     elsif ($self->{terminal} =~ /^pdf/ && $imgfmt eq 'ps')
     {
-        system("pdf2ps $self->{output} $self->{output}");
+        system("pdf2ps $temp $temp".".$imgfmt");
     }
     else
     {
-#        my (undef, $temp) = tempfile(DIR => '/tmp');
-        my $temp = "$self->{_script}.tmp";
-        move($self->{output}, $temp);
-
         # Rotate 90 deg for landscape image
         if (defined $self->{orient} && $self->{orient} eq 'portrait')
         {
@@ -683,9 +683,11 @@ sub convert
         {
             system("convert -rotate 90 $temp $temp".".$imgfmt");
         }
-        move("$temp".".$imgfmt", $self->{output});
-        unlink($temp);    # remove the temp file
     }
+
+    # Remove the temp file
+    move("$temp".".$imgfmt", $self->{output});
+    unlink($temp);
     return($self);
 }
 
@@ -763,6 +765,7 @@ sub pdf
 
 package Chart::Gnuplot::DataSet;
 use strict;
+use Carp;
 use File::Temp qw(tempdir);
 use Chart::Gnuplot::Util qw(_lineType _pointType);
 
@@ -821,6 +824,8 @@ sub _thaw
             $self->{style} =~ /error/)
         {
             my $xdata = $self->{xdata};
+            croak("x-data and y-data have unequal length") if
+                (scalar(@$ydata) ne scalar(@$xdata));
 
             # Error bars along x-axis
             if ($self->{style} =~ /^xerror/)
@@ -902,7 +907,8 @@ sub _thaw
         elsif (defined $self->{xdata})
         {
             my $xdata = $self->{xdata};
-            my $ydata = $self->{ydata};
+            croak("x-data and y-data have unequal length") if
+                (scalar(@$ydata) ne scalar(@$xdata));
             for (my $i = 0; $i < @$xdata; $i++)
             {
                 print DATA "$$xdata[$i] $$ydata[$i]\n";

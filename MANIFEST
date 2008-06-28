@@ -83,7 +83,13 @@ examples/ticFmt_12.pl
 examples/index.html
 examples/dataSrc_3.dat
 examples/plot3d_2.dat
-t/gnuplot.t
+t/axisLabel.t
+t/chartTitle.t
+t/data.dat
+t/dataSrc.t
+t/grid.t
+t/use.t
+Changes
 README
 MANIFEST
 Makefile.PL

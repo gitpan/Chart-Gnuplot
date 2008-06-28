@@ -1,0 +1,11 @@
+Change log for Chart::Gnuplot
+
+0.02
+    - Fix a bug that makes converting output figure to PDF failed
+    - Fix a bug that makes printing certain error mesg failed
+    - Add checking whether xdata and ydata array lengths are the same
+    - Add more test cases
+    - Remove some redundant code
+
+0.01
+    Initial release
