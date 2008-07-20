@@ -19,7 +19,7 @@ my $temp = "temp.ps";
 {
     my $c = Chart::Gnuplot->new(
         output => $temp,
-        grid => {
+        grid   => {
             xlines   => "on, on",
             ylines   => "on, off",
             linetyle => "longdash, dot-longdash",

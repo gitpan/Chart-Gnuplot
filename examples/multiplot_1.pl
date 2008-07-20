@@ -21,7 +21,7 @@ $charts[0][0] = Chart::Gnuplot->new(
 my $dataSet = Chart::Gnuplot::DataSet->new(
     func => "sin(x)",
 );
-$charts[0][0]->add($dataSet);
+$charts[0][0]->add2d($dataSet);
 #----------------------------------------
 
 #----------------------------------------
@@ -32,7 +32,7 @@ $charts[0][1] = Chart::Gnuplot->new(
 $dataSet = Chart::Gnuplot::DataSet->new(
     func => "cos(x)",
 );
-$charts[0][1]->add($dataSet);
+$charts[0][1]->add2d($dataSet);
 #----------------------------------------
 
 #----------------------------------------
@@ -43,7 +43,7 @@ $charts[1][0] = Chart::Gnuplot->new(
 $dataSet = Chart::Gnuplot::DataSet->new(
     func => "exp(x)",
 );
-$charts[1][0]->add($dataSet);
+$charts[1][0]->add2d($dataSet);
 #----------------------------------------
 
 #----------------------------------------
@@ -54,7 +54,7 @@ $charts[1][1] = Chart::Gnuplot->new(
 $dataSet = Chart::Gnuplot::DataSet->new(
     func => "log(x)",
 );
-$charts[1][1]->add($dataSet);
+$charts[1][1]->add2d($dataSet);
 #----------------------------------------
 
 # Plot the multplot chart

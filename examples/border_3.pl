@@ -3,9 +3,11 @@ use strict;
 use Chart::Gnuplot;
 
 my $chart = Chart::Gnuplot->new(
-    output    => "gallery/size_2.png",
-    title     => "20% shorter in length, 50% shorter in height",
-    imagesize => "0.8, 0.5",
+    output => "gallery/border_3.png",
+    title  => "Line color of the graph border",
+    border => {
+        color => '#ff00ff',
+    },
 );
 
 my $dataSet = Chart::Gnuplot::DataSet->new(

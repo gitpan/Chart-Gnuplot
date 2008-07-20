@@ -5,7 +5,7 @@ use Carp;
 use File::Copy;
 use File::Temp qw(tempdir);
 use Chart::Gnuplot::Util qw(_lineType);
-$VERSION = 0.02;
+$VERSION = 0.03;
 
 # Constructor
 sub new
@@ -54,12 +54,30 @@ sub set
 }
 
 
-# Add a data set to the chart object
+# Add a 2D data set to the chart object
 # - used with multiplot
-sub add
+sub add2d
 {
     my ($self, @dataSet) = @_;
-    push(@{$self->{_dataSets}}, @dataSet);
+    push(@{$self->{_dataSets2D}}, @dataSet);
+}
+
+
+# Add a 3D data set to the chart object
+# - used with multiplot
+sub add3d
+{
+    my ($self, @dataSet) = @_;
+    push(@{$self->{_dataSets3D}}, @dataSet);
+}
+
+
+# Add a 2D data set to the chart object
+# - redirect to &add2d
+# - for backward compatibility
+sub add
+{
+    &add2d(@_);
 }
 
 
@@ -120,6 +138,12 @@ sub multiplot
     }
 
     open(PLT, ">>$self->{_script}") || confess("Can't write $self->{_script}");
+    # Emulate the title when there is background color fill
+    if (defined $self->{title} && defined $self->{bg})
+    {
+        print PLT "set label \"$self->{title}\" at screen 0.5, screen 1 ".
+            "center offset 0,-1\n";
+    }
     if (scalar(@charts) == 1 && ref($charts[0]) eq 'ARRAY')
     {
         my $nrows = scalar(@{$charts[0]});
@@ -134,15 +158,29 @@ sub multiplot
                 $chart->_script($self->{_script});
 
                 my $set = &_setChart($chart);
-                my @dataSet = @{$chart->{_dataSets}};
-                &_setTimeFmt($chart, @dataSet);
-            
-                open(PLT, ">>$self->{_script}") ||
-                    confess("Can't write $self->{_script}");
-                print PLT "\nplot ";
-                print PLT join(', ', map {$_->_thaw} @dataSet), "\n";
-                close(PLT);
-            
+                if (defined $chart->{_dataSets2D})
+                {
+                    my @dataSet = @{$chart->{_dataSets2D}};
+                    &_setTimeFmt($chart, @dataSet);
+                
+                    open(PLT, ">>$self->{_script}") ||
+                        confess("Can't write $self->{_script}");
+                    print PLT "\nplot ";
+                    print PLT join(', ', map {$_->_thaw} @dataSet), "\n";
+                    close(PLT);
+                }
+                elsif (defined $chart->{_dataSets3D})
+                {
+                    my @dataSet = @{$chart->{_dataSets3D}};
+                    &_setTimeFmt($chart, @dataSet);
+                
+                    open(PLT, ">>$self->{_script}") ||
+                        confess("Can't write $self->{_script}");
+                    print PLT "\nsplot ";
+                    print PLT join(', ', map {$_->_thaw} @dataSet), "\n";
+                    close(PLT);
+                }
+
                 &_unset($chart, $set);
             }
         }
@@ -157,14 +195,28 @@ sub multiplot
             $chart->_script($self->{_script});
 
             my $set = &_setChart($chart);
-            my @dataSet = @{$chart->{_dataSets}};
-            &_setTimeFmt($chart, @dataSet);
-        
-            open(PLT, ">>$self->{_script}") ||
-                confess("Can't write $self->{_script}");
-            print PLT "\nplot ";
-            print PLT join(', ', map {$_->_thaw} @dataSet), "\n";
-            close(PLT);
+            if (defined $chart->{_dataSets2D})
+            {
+                my @dataSet = @{$chart->{_dataSets2D}};
+                &_setTimeFmt($chart, @dataSet);
+            
+                open(PLT, ">>$self->{_script}") ||
+                    confess("Can't write $self->{_script}");
+                print PLT "\nplot ";
+                print PLT join(', ', map {$_->_thaw} @dataSet), "\n";
+                close(PLT);
+            }
+            elsif (defined $chart->{_dataSets3D})
+            {
+                my @dataSet = @{$chart->{_dataSets3D}};
+                &_setTimeFmt($chart, @dataSet);
+            
+                open(PLT, ">>$self->{_script}") ||
+                    confess("Can't write $self->{_script}");
+                print PLT "\nsplot ";
+                print PLT join(', ', map {$_->_thaw} @dataSet), "\n";
+                close(PLT);
+            }
         
             &_unset($chart, $set);
         }
@@ -173,6 +225,7 @@ sub multiplot
 
     # Generate image file
     &_execute($self);
+    return($self);
 }
 
 
@@ -190,7 +243,7 @@ sub command
 
 
 # Set how the chart looks like
-# - call _setTitle(), _setAxisLabel(), _setTics(), _setGrid()
+# - call _setTitle(), _setAxisLabel(), _setTics(), _setGrid(), _setBorder()
 # - called by plot2d() and plot3d()
 sub _setChart
 {
@@ -223,6 +276,45 @@ sub _setChart
     my $pltTmp = $self->{_script};
     open(PLT, ">>$pltTmp") || confess("Can't write gnuplot script $pltTmp");
 
+    # Chart background color
+    if (defined $self->{bg})
+    {
+        my $bg = $self->{bg};
+        if (ref($bg) eq 'HASH')
+        {
+            print PLT "set object rect from screen 0, screen 0 to ".
+                "screen 1, screen 1 fillcolor rgb \"$$bg{color}\"";
+            print PLT " fillstyle solid $$bg{density}" if
+                (defined $$bg{density});
+            print PLT " behind\n";
+        }
+        else
+        {
+            print PLT "set object rect from screen 0, screen 0 to ".
+                "screen 1, screen 1 fillcolor rgb \"$bg\" behind\n";
+        }
+    }
+
+    # Plot area background color
+    if (defined $self->{plotbg})
+    {
+        my $bg = $self->{plotbg};
+        if (ref($bg) eq 'HASH')
+        {
+            print PLT "set object rect from graph 0, graph 0 to ".
+                "graph 1, graph 1 fillcolor rgb \"$$bg{color}\"";
+            print PLT " fillstyle solid $$bg{density}" if
+                (defined $$bg{density});
+            print PLT " behind\n";
+        }
+        else
+        {
+            print PLT "set object rect from graph 0, graph 0 to ".
+                "graph 1, graph 1 fillcolor rgb \"$bg\" behind\n";
+        }
+    }
+
+    # Loop and process other chart options
     foreach my $attr (keys %$self)
     {
         if ($attr eq 'output')
@@ -275,6 +367,11 @@ sub _setChart
             }
             push(@sets, $attr);
         }
+        elsif ($attr eq 'border')
+        {
+            print PLT "set border".&_setBorder($self->{border})."\n";
+            push(@sets, 'border');
+        }
         elsif ($attr eq 'grid')
         {
             print PLT "set grid".&_setGrid($self->{grid})."\n";
@@ -293,7 +390,8 @@ sub _setChart
         {
             print PLT "set $attr $self->{$attr}\n";
         }
-        elsif ($attr !~ /^(gnuplot|imagesize|orient)$/ && $attr !~ /^_/)
+        elsif ($attr !~ /^(gnuplot|imagesize|orient|bg|plotbg)$/ &&
+            $attr !~ /^_/)
         {
             (defined $self->{$attr} && $self->{$attr} ne '')?
                 (print PLT "set $attr $self->{$attr}\n"):
@@ -492,11 +590,11 @@ sub _setTics
 # Usage example:
 # my $chart = Chart::Gnuplot->new(
 #     grid => {
-#        type   => 'dash, dot',        # default: dot
-#         width  => '2, 1',            # default: 0
-#         color  => 'blue, gray',        # default: black
-#         xlines => 'on, on',            # default: 'on, off'
-#         ylines => 'on, on',            # default: 'on, off'
+#         type   => 'dash, dot',        # default: dot
+#         width  => '2, 1',             # default: 0
+#         color  => 'blue, gray',       # default: black
+#         xlines => 'on, on',           # default: 'on, off'
+#         ylines => 'on, on',           # default: 'on, off'
 #    },
 #     ...
 # );
@@ -563,6 +661,38 @@ sub _setGrid
 }
 
 
+# Set the details of the graph border
+# - called by _setChart()
+#
+# Usage example:
+# my $chart = Chart::Gnuplot->new(
+#     border => {
+#         linetype => 3,            # default: solid
+#         width    => 2,            # default: 0
+#         color    => '#ff00ff',    # default: system defined
+#    },
+#     ...
+# );
+#
+# Remark:
+# - By default, the color of the axis tics would follow the border unless
+#   specified otherwise.
+#
+# TODO:
+# - support layer <front/back>
+sub _setBorder
+{
+    my ($border) = @_;
+
+    my $out = '';
+    $out .= " linetype ".&_lineType($$border{linetype}) if
+        (defined $$border{linetype});
+    $out .= " linewidth $$border{width}" if (defined $$border{width});
+    $out .= " linecolor rgb \"$$border{color}\"" if (defined $$border{color});
+    return($out);
+}
+
+
 # Generate the image file
 sub _execute
 {
@@ -574,7 +704,7 @@ sub _execute
     system("$gnuplot $self->{_script}");
 
     # Convert the image to the user-specified format
-    if (defined $self->{output})
+    if (defined $self->{output} && $self->{output} =~ /\./)
     {
         my @a = split(/\./, $self->{output});
         my $ext = $a[-1];
@@ -790,6 +920,9 @@ sub AUTOLOAD
 }
 
 
+# Thaw the data set object to string
+# - call _fillStyle()
+#
 # TODO:
 # - "using" feature for "file" dataset
 # - data file delimiter
@@ -800,7 +933,7 @@ sub _thaw
     my ($self) = @_;
     my $string;
 
-    # Data points
+    # Data points stored in arrays
     # - in any case, ydata need to be defined
     if (defined $self->{ydata})
     {
@@ -811,11 +944,58 @@ sub _thaw
         my $fileTmp = "$dirTmp/data";
         open(DATA, ">$fileTmp") || confess("Can't write data to temp file");
 
-        # Plot 3D graph
+        # Process 3D data set
         # - zdata is defined
-        # XXX not implemented
         if (defined $self->{zdata})
         {
+            my $zdata = $self->{zdata};
+            my $xdata = $self->{xdata};
+            croak("x-data and y-data have unequal length") if
+                (scalar(@$ydata) ne scalar(@$xdata));
+            croak("y-data and z-data have unequal length") if
+                (scalar(@$ydata) ne scalar(@$zdata));
+            for (my $i = 0; $i < @$xdata; $i++)
+            {
+                print DATA "$$xdata[$i] $$ydata[$i] $$zdata[$i]\n";
+                print DATA "\n" if ($i > 0 && $$xdata[$i] != $$xdata[$i-1]);
+            }
+            $string = "\"$fileTmp\"";
+
+            # Construst using statement for date-time data
+            if (defined $self->{timefmt})
+            {
+                my @a = split(/\s+/, $$xdata[0]);
+                my $yCol = scalar(@a) + 1;
+                $string .= " using 1:$yCol";
+
+                my @b = split(/\s+/, $$ydata[0]);
+                my $zCol = scalar(@b) + $yCol;
+                $string .= ":$zCol";
+            }
+        }
+        # Treatment for financebars and candlesticks styles
+        # - Both xdata and ydata are defined
+        elsif (defined $self->{xdata} && defined $self->{style} &&
+            $self->{style} =~ /^(financebars|candlesticks)$/)
+        {
+            my $xdata = $self->{xdata};
+            croak("x-data and y-data have unequal length") if
+                (scalar(@{$$ydata[0]}) ne scalar(@$xdata));
+
+            for (my $i = 0; $i < @$xdata; $i++)
+            {
+                print DATA "$$xdata[$i] $$ydata[0][$i] $$ydata[1][$i] ".
+                    "$$ydata[2][$i] $$ydata[3][$i]\n";
+            }
+            $string = "\"$fileTmp\"";
+
+            # Construst using statement for date-time data
+            if (defined $self->{timefmt})
+            {
+                my @a = split(/\s+/, $$xdata[0]);
+                my $yCol = scalar(@a) + 1;
+                $string .= " using 1:$yCol";
+            }
         }
         # Treatment for errorbars and errorlines styles
         # - Both xdata and ydata are defined
@@ -824,12 +1004,13 @@ sub _thaw
             $self->{style} =~ /error/)
         {
             my $xdata = $self->{xdata};
-            croak("x-data and y-data have unequal length") if
-                (scalar(@$ydata) ne scalar(@$xdata));
 
             # Error bars along x-axis
             if ($self->{style} =~ /^xerror/)
             {
+                croak("x-data and y-data have unequal length") if
+                    (scalar(@{$$xdata[0]}) ne scalar(@$ydata));
+
                 for (my $i = 0; $i < @$ydata; $i++)
                 {
                     print DATA "$$xdata[0][$i] $$ydata[$i]";
@@ -843,6 +1024,9 @@ sub _thaw
             # Error bars along y-axis
             elsif ($self->{style} =~ /^(y|box)error/)
             {
+                croak("x-data and y-data have unequal length") if
+                    (scalar(@{$$ydata[0]}) ne scalar(@$xdata));
+
                 for (my $i = 0; $i < @$xdata; $i++)
                 {
                     print DATA "$$xdata[$i] $$ydata[0][$i]";
@@ -926,9 +1110,19 @@ sub _thaw
         # Only ydata is defined
         else
         {
+            # Treatment for financebars and candlesticks styles
+            if (defined $self->{style} &&
+                $self->{style} =~ /^(financebars|candlesticks)$/)
+            {
+                for (my $i = 0; $i < @{$$ydata[0]}; $i++)
+                {
+                    print DATA "$i $$ydata[0][$i] $$ydata[1][$i] ".
+                        "$$ydata[2][$i] $$ydata[3][$i]\n";
+                }
+            }
             # Treatment for errorbars and errorlines styles
             # - Style is defined and contain "error"
-            if (defined $self->{style} && $self->{style} =~ /^yerror/)
+            elsif (defined $self->{style} && $self->{style} =~ /^yerror/)
             {
                 for (my $i = 0; $i < @{$$ydata[0]}; $i++)
                 {
@@ -1027,8 +1221,28 @@ sub _thaw
     $string .= " pointtype ".&_pointType($self->{pointtype}) if
         (defined $self->{pointtype});
     $string .= " pointsize $self->{pointsize}" if (defined $self->{pointsize});
+    $string .= " fill".&_fillStyle($self->{fill}) if (defined $self->{fill});
     return($string);
 }
+
+
+# Generate box filling style string
+# - called by _thaw()
+sub _fillStyle
+{
+    my ($fill) = @_;
+
+    if (ref($fill) eq 'HASH')
+    {
+        my $style = " solid $$fill{density}";
+        $style .= " noborder" if (defined $$fill{border} &&
+            $$fill{border} =~ /^(off|no)$/);
+        return($style);
+    }
+
+    return(" solid $fill");
+}
+
 
 1;
 
@@ -1123,45 +1337,72 @@ The supported image formats are:
     psd  : Adobe Photoshop bitmap file
     xpm  : X Windows system pixmap
 
+If the filename has no extension, postscipt will be used.
+
 =head3 title
 
 Title of the chart. E.g.,
 
     title => "Chart title"
 
-Properties (like position, font size and so on) of the chart title can be
-specified in hash. E.g.,
+Properties of the chart title can be specified in hash. E.g.,
 
     title => {
-        text  => "Chart title",
-        font  => "arial, 20",
-        color => "blue",
-		.....
+        text => "Chart title",
+        font => "arial, 20",
+        .....
     }
+
+Supported properties are:
+
+    text     : title in plain text
+    font     : font face (and optionally font size)
+    color    : font color
+    offset   : offset relative to the default position
+    enhanced : title contains subscript/superscipt/greek? (on/off)
+
+Default values would be used for properties not specified. These properties has
+no effect on the main title of the multi-chart (see L<multiplot>).
 
 =head3 xlabel
 
-Label of the x-axis.
+Label of the x-axis. E.g.
+
+    xlabel => "Bottom axis label"
+
+Properties of the chart title can be specified in hash, similar to the chart
+title. Supported properties are:
+
+    text     : title in plain text
+    font     : font face (and optionally font size)
+    color    : font color
+    offset   : offset relative to the default position
+    rotate   : rotation by degrees
+    enhanced : title contains subscript/superscipt/greek? (on/off)
 
 =head3 ylabel
 
-Label of the y-axis.
+Label of the y-axis. See L<xlabel>.
 
 =head3 x2label
 
-Label of the secondary x-axis (displayed on the top of the graph).
+Label of the secondary x-axis (displayed on the top of the graph). See
+L<xlabel>.
 
 =head3 y2label
 
-Label of the secondary y-axis (displayed on the right of the graph).
+Label of the secondary y-axis (displayed on the right of the graph). See
+L<xlabel>.
 
 =head3 zlabel
 
-Label of the z-axis in 3D plots.
+Label of the z-axis in 3D plots. See L<xlabel>.
 
 =head3 xrange
 
-Range of the x-axis in the plot.
+Range of the x-axis in the plot, e.g.
+
+    xrange => [0, "pi"];
 
 =head3 yrange
 
@@ -1204,9 +1445,36 @@ are combinations of "x", "y", "x2", and "y2" joined by ",". E.g.
 
 means that the x-axis and y2-axis are data/time axes.
 
+=head3 border
+
+Border of the graph. Properties supported are "linetype", "width", and "color".
+E.g.
+
+    border => {
+        linetype => 3,
+        width    => 2,
+        color    => '#ff00ff',
+    }
+
 =head3 grid
 
 Grid lines.
+
+=head3 bmargin
+
+Bottom margin (in character height). This option has no effect in 3D plots.
+
+=head3 lmargin
+
+Left margin (in character width)
+
+=head3 rmargin
+
+Right margin (in character width). This option has no effect in 3D plots.
+
+=head3 tmargin
+
+Top margin (in character height). This option has no effect in 3D plots.
 
 =head3 orient
 
@@ -1218,7 +1486,21 @@ Size (length and height) of the image relative to the default.
 
 =head3 size
 
-Size of the chart relative to the image
+Size of the chart relative to the chart size. This is useful in some
+multi-plot such as inset chart.
+
+=head3 origin
+
+Origin of the chart. This is useful in some multi-plot such as inset chart.
+
+=head3 bg (experimental)
+
+Background color of the chart. This option is experimental.
+
+=head3 plotbg (experimental)
+
+Background color of the plot area. This option has no effect in 3D plots and is
+experimental.
 
 =head3 gnuplot
 
@@ -1267,11 +1549,16 @@ object. It is not yet completed. Only basic features are supported.
 
     $chert->multiplot(@charts);
 
-Plot multiple charts in a single image file.
+Plot multiple charts in the same image.
 
-=head3 add
+=head3 add2d
 
-Add a dataset to a chart without plotting it out immediately. Used with
+Add a 2D dataset to a chart without plotting it out immediately. Used with
+C<multiplot>.
+
+=head3 add3d
+
+Add a 3D dataset to a chart without plotting it out immediately. Used with
 C<multiplot>.
 
 =head3 convert
@@ -1443,21 +1730,25 @@ Title of the dataset (shown in the legend).
 
 =head3 style
 
-The plotting style for the dataset. Some common options include
+The plotting style for the dataset, including
 
-    lines        : join adjacent points by straight lines
-    points       : mark each points by a symbol
-    linespoints  : both "lines" and "points"
-    dots         : dot each points. Useful for large datasets
-    impluses     : draw a vertical line from the x-axis to each point
-    steps        : join adjacent points by steps
-    boxes        : draw a centered box from the x-axis to each point
-    xerrorbars   : "dots" with horizontal error bars
-    yerrorbars   : "dots" with vertical error bars
-    xyerrorbars  : both "xerrorbars" and "yerrorbars"
-    xerrorlines  : "linespoints" with horizontal error bars
-    yerrorlines  : "linespoints" with vertical error bars
-    xyerrorlines : both "xerrorlines" and "yerrorlines"
+    lines          : join adjacent points by straight lines
+    points         : mark each points by a symbol
+    linespoints    : both "lines" and "points"
+    dots           : dot each points. Useful for large datasets
+    impluses       : draw a vertical line from the x-axis to each point
+    steps          : join adjacent points by steps
+    boxes          : draw a centered box from the x-axis to each point
+    xerrorbars     : "dots" with horizontal error bars
+    yerrorbars     : "dots" with vertical error bars
+    xyerrorbars    : both "xerrorbars" and "yerrorbars"
+    xerrorlines    : "linespoints" with horizontal error bars
+    yerrorlines    : "linespoints" with vertical error bars
+    xyerrorlines   : both "xerrorlines" and "yerrorlines"
+    boxerrorbars   : "boxes" with "yerrorbars"
+    boxxyerrorbars : use rectangles to represent the data with errors
+    financebars    : finance bars for open, high, low and close price
+    candlesticks   : candle sticks for open, high, low and close price
 
 =head3 color
 
@@ -1466,7 +1757,7 @@ The supported color names can be found in the file F<doc/colors.txt> in the
 distribution. E.g.
 
     color => "#99ccff"
-    #or
+    # or
     color => "dark-red"
 
 =head3 width
@@ -1484,6 +1775,11 @@ Point type.
 =head3 pointsize
 
 Point size of the plot.
+
+=head3 fill
+
+Filling string. Has effect only on plotting styles "boxes", "boxxyerrorbars"
+and "financebars".
 
 =head3 axes
 
@@ -1572,7 +1868,7 @@ y-axis.
 
     $chart->plot2d($dataSet);
 
-=item 5. Describe the plots
+=item 5. Chart title, axis label and legend
 
     # Chart object
     my $chart = Chart::Gnuplot->new(
@@ -1598,6 +1894,55 @@ y-axis.
 
     $chart->plot2d($sine, $cosine, $tangent);
 
+=item 6. Plot a financial time series
+
+    my $chart = Chart::Gnuplot->new(
+        output   => "dj.ps",
+        title    => "Dow-Jones Index time series",
+        timeaxis => 'x',
+        xtics    => {
+            labelfmt => '%b%y',
+        },
+    );
+
+    my $dow = Chart::Gnuplot::DataSet->new(
+        file    => "dj.dat",
+        timefmt => '%Y-%m-%d',      # time format of the input data
+        style   => "candlesticks",
+        grid    => 'on',
+    );
+
+    $chart->plot2d($dow);
+
+=item 7. Plot several graphs on the same image
+
+    my $chart = Chart::Gnuplot->new(
+        output => "multiplot.gif",
+    );
+
+    my $left = Chart::Gnuplot->new();
+    my $sine = Chart::Gnuplot::DataSet->new(
+        func  => "sin(x)",
+    );
+    $left->add2d($sine);
+
+    my $center = Chart::Gnuplot->new();
+    my $cosine = Chart::Gnuplot::DataSet->new(
+        func  => "cos(x)",
+    );
+    $center->add2d($cosine);
+
+    my $right = Chart::Gnuplot->new();
+    my $tangent = Chart::Gnuplot::DataSet->new(
+        func  => "tan(x)",
+    );
+    $right->add2d($tangent);
+
+    # Place the Chart::Gnuplot objects in matrix to indicate their locations
+    $chart->multiplot([
+        [$left, $center, $right]
+    ]);
+
 =back
 
 =head1 FUTURE PLAN
@@ -1614,9 +1959,7 @@ y-axis.
 
 =item 5. Add method to copy Chart and DataSet objects.
 
-=item 6. Add more plotting styles.
-
-=item 7. Improve the testsuite.
+=item 6. Improve the testsuite.
 
 =back
 

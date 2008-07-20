@@ -7,6 +7,14 @@ axisLabel_5.png \
 axisLabel_6.png \
 axisLabel_7.png \
 axisLabel_8.png \
+bg_1.png \
+bg_2.png \
+border_1.png \
+border_2.png \
+border_3.png \
+chartDim_1.png \
+chartDim_2.png \
+chartDim_3.png \
 chartFmt_1.png \
 chartFmt_2.png \
 chartFmt_3.png \
@@ -43,9 +51,11 @@ lineStyle_4.png \
 lineStyle_5.png \
 multiplot_1.png \
 multiplot_2.png \
+multiplot_3.png \
 plot3d_1.png \
 plot3d_2.png \
 plot3d_3.png \
+plot3d_4.png \
 plotAxes_1.png \
 plotAxes_2.png \
 plotStyle_1.png \
@@ -58,10 +68,11 @@ plotStyle_7.png \
 plotStyle_8.png \
 plotStyle_9.png \
 plotStyle_10.png \
+plotStyle_11.png \
+plotStyle_12.png \
+plotStyle_13.png \
 range_1.png \
 range_2.png \
-size_1.png \
-size_2.png \
 ticFmt_1.png \
 ticFmt_2.png \
 ticFmt_3.png \
@@ -85,4 +96,5 @@ mkdir:
 	@perl $<
 
 clean:
+	@rm -f *~
 	@-cd gallery; rm -f $(IMAGES)

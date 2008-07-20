@@ -1,5 +1,17 @@
 Change log for Chart::Gnuplot
 
+0.03
+    - Support financebars and candlesticks plotting styles
+    - Support setting filling the boxes and candlesticks
+    - Support setting style of the borders
+    - Support plotting 3D graph from arrays of coordinates of data points
+    - Support adding 3D data set to multiplot chart
+    - Support setting of background color (experimental)
+    - Support setting of plot area background color (experimental)
+    - Plot in PS if the output file has no extension
+    - Fix a bug of checking array lengths in error-type style
+    - Update the POD
+
 0.02
     - Fix a bug that makes converting output figure to PDF failed
     - Fix a bug that makes printing certain error mesg failed
