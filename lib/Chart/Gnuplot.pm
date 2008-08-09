@@ -4,13 +4,20 @@ use vars qw($VERSION);
 use Carp;
 use File::Copy;
 use File::Temp qw(tempdir);
-use Chart::Gnuplot::Util qw(_lineType);
-$VERSION = 0.03;
+use Chart::Gnuplot::Util qw(_lineType _pointType);
+$VERSION = 0.04;
 
 # Constructor
 sub new
 {
     my ($class, %hash) = @_;
+
+    # Create temporary file to store Gnuplot instructions
+    if (!defined $hash{_multiplot})     # if not in multiplot mode
+    {
+        my $dirTmp = tempdir(CLEANUP => 1, DIR => '/tmp');
+        $hash{_script} = "$dirTmp/plot";
+    }
 
     # Default terminal: postscript terminal with color drawing elements
     $hash{terminal} = "postscript enhanced color" if
@@ -75,10 +82,7 @@ sub add3d
 # Add a 2D data set to the chart object
 # - redirect to &add2d
 # - for backward compatibility
-sub add
-{
-    &add2d(@_);
-}
+sub add {&add2d(@_);}
 
 
 # Plot 2D graphs
@@ -90,7 +94,7 @@ sub add
 sub plot2d
 {
     my ($self, @dataSet) = @_;
-    &_setChart($self) if (!defined $self->{_script});
+    &_setChart($self);
     &_setTimeFmt($self, @dataSet);
 
     open(PLT, ">>$self->{_script}") || confess("Can't write $self->{_script}");
@@ -113,7 +117,7 @@ sub plot2d
 sub plot3d
 {
     my ($self, @dataSet) = @_;
-    &_setChart($self) if (!defined $self->{_script});
+    &_setChart($self);
     &_setTimeFmt($self, @dataSet);
 
     open(GPH, ">>$self->{_script}") || confess("Can't write $self->{_script}");
@@ -131,19 +135,18 @@ sub plot3d
 sub multiplot
 {
     my ($self, @charts) = @_;
-    if (!defined $self->{_script})
-    {
-        my $set = &_setChart($self);
-        &_unset($self, $set);
-    }
+    my $set = &_setChart($self);
+    &_unset($self, $set);
 
     open(PLT, ">>$self->{_script}") || confess("Can't write $self->{_script}");
+
     # Emulate the title when there is background color fill
     if (defined $self->{title} && defined $self->{bg})
     {
         print PLT "set label \"$self->{title}\" at screen 0.5, screen 1 ".
             "center offset 0,-1\n";
     }
+
     if (scalar(@charts) == 1 && ref($charts[0]) eq 'ARRAY')
     {
         my $nrows = scalar(@{$charts[0]});
@@ -156,6 +159,7 @@ sub multiplot
             {
                 my $chart = $charts[0][$r][$c];
                 $chart->_script($self->{_script});
+                $chart->_multiplot(1);
 
                 my $set = &_setChart($chart);
                 if (defined $chart->{_dataSets2D})
@@ -193,6 +197,7 @@ sub multiplot
         foreach my $chart (@charts)
         {
             $chart->_script($self->{_script});
+            $chart->_multiplot(1);
 
             my $set = &_setChart($chart);
             if (defined $chart->{_dataSets2D})
@@ -233,7 +238,7 @@ sub multiplot
 sub command
 {
     my ($self, $cmd) = @_;
-    &_setChart($self) if (!defined $self->{_script});
+    &_setChart($self);
 
     open(PLT, ">>$self->{_script}") || confess("Can't write $self->{_script}");
     print PLT "$cmd\n";
@@ -243,7 +248,8 @@ sub command
 
 
 # Set how the chart looks like
-# - call _setTitle(), _setAxisLabel(), _setTics(), _setGrid(), _setBorder()
+# - call _setTitle(), _setAxisLabel(), _setTics(), _setGrid(), _setBorder(),
+#        _setTimestamp()
 # - called by plot2d() and plot3d()
 sub _setChart
 {
@@ -262,16 +268,8 @@ sub _setChart
         $self->{terminal} .= " size $ws,$hs";
     }
 
-    # Create temporary file to store Gnuplot instructions
-    if (!defined $self->{_script})
-    {
-        my $dirTmp = tempdir(CLEANUP => 1, DIR => '/tmp');
-        $self->_script("$dirTmp/plot");
-    }
-    else
-    {
-        delete $self->{terminal};
-    }
+    # Prevent changing terminal in multiplot mode
+    delete $self->{terminal} if (defined $self->{_multiplot});
 
     my $pltTmp = $self->{_script};
     open(PLT, ">>$pltTmp") || confess("Can't write gnuplot script $pltTmp");
@@ -377,6 +375,11 @@ sub _setChart
             print PLT "set grid".&_setGrid($self->{grid})."\n";
             push(@sets, 'grid');
         }
+        elsif ($attr eq 'timestamp')
+        {
+            print PLT "set timestamp".&_setTimestamp($self->{timestamp})."\n";
+            push(@sets, 'timestamp');
+        }
         elsif ($attr eq 'timeaxis')
         {
             my @axis = split(/,\s?/, $self->{timeaxis});
@@ -404,41 +407,16 @@ sub _setChart
 }
 
 
-# Set the input time format
-# - must be called after _setChart() is called
-# - called by plot2d() and plot3d()
-sub _setTimeFmt
-{
-    my ($self, @dataSet) = @_;
-
-    # Setting due to DataSet object attributes
-    open(PLT, ">>$self->{_script}") || confess("Can't write $self->{_script}");
-    foreach my $ds (@dataSet)
-    {
-        # Set the format of the time data
-        if (defined $ds->{timefmt})    # input time format
-        {
-            print PLT "set timefmt \"$ds->{timefmt}\"\n";
-            last;
-        }
-    }
-    close(PLT);
-}
-
-
 # Set the details of the title
 # - called by _setChart()
 #
 # Usage example:
-# my $chart = Chart::Gnuplot->new(
-#     title => {
-#        text   => "My title",
-#        font   => "arial, 14",
-#        color  => "brown",
-#        offset => "0, -1",
-#    },
-#     ...
-# );
+# title => {
+#     text   => "My title",
+#     font   => "arial, 14",
+#     color  => "brown",
+#     offset => "0, -1",
+# },
 sub _setTitle
 {
     my ($title) = @_;
@@ -472,16 +450,13 @@ sub _setTitle
 # - called by _setChart()
 #
 # Usage example:
-# my $chart = Chart::Gnuplot->new(
-#     xlabel => {
-#        text   => "My x-axis label",
-#        font   => "arial, 14",
-#        color  => "brown",
-#        offset => "0, -1",
-#        rotate => 45,
-#    },
-#     ...
-# );
+# xlabel => {
+#     text   => "My x-axis label",
+#     font   => "arial, 14",
+#     color  => "brown",
+#     offset => "0, -1",
+#     rotate => 45,
+# },
 #
 # TODO
 # - support radian and pi in "rotate"
@@ -523,22 +498,19 @@ sub _setAxisLabel
 # - called by _setChart()
 #
 # Usage example:
-# my $chart = Chart::Gnuplot->new(
-#     xtics => {
-#       labels    => [-10, 15, 20, 25],
-#       labelfmt  => "%3f",
-#       font      => "arial",
-#       fontsize  => 14,
-#       fontcolor => "brown",
-#       offset    => "0, -1",
-#       rotate    => 45,
-#       length    => "2,1",
-#       along     => 'axis',
-#       x2tics    => 'off',
-#       minor     => 3,
-#    },
-#     ...
-# );
+# xtics => {
+#    labels    => [-10, 15, 20, 25],
+#    labelfmt  => "%3f",
+#    font      => "arial",
+#    fontsize  => 14,
+#    fontcolor => "brown",
+#    offset    => "0, -1",
+#    rotate    => 45,
+#    length    => "2,1",
+#    along     => 'axis',
+#    x2tics    => 'off',
+#    minor     => 3,
+# },
 #
 # TODO
 # - able to replace the label for specified text
@@ -588,23 +560,17 @@ sub _setTics
 # - called by _setChart()
 #
 # Usage example:
-# my $chart = Chart::Gnuplot->new(
-#     grid => {
-#         type   => 'dash, dot',        # default: dot
-#         width  => '2, 1',             # default: 0
-#         color  => 'blue, gray',       # default: black
-#         xlines => 'on, on',           # default: 'on, off'
-#         ylines => 'on, on',           # default: 'on, off'
-#    },
-#     ...
-# );
+# grid => {
+#      type   => 'dash, dot',        # default: dot
+#      width  => '2, 1',             # default: 0
+#      color  => 'blue, gray',       # default: black
+#      xlines => 'on, on',           # default: 'on, off'
+#      ylines => 'on, on',           # default: 'on, off'
+# },
 #
 # # OR
 # 
-# my $chart = Chart::Gnuplot->new(
-#     grid => 'on',
-#     ...
-# );
+# grid => 'on',
 #
 # TODO:
 # - support polar grid
@@ -657,6 +623,10 @@ sub _setGrid
         $out .= "$major" if ($major ne '');
         $out .= ",$minor" if ($minor ne '');
     }
+    elsif ($grid ne 'on')
+    {
+        return($grid);
+    }
     return($out);
 }
 
@@ -665,14 +635,11 @@ sub _setGrid
 # - called by _setChart()
 #
 # Usage example:
-# my $chart = Chart::Gnuplot->new(
-#     border => {
-#         linetype => 3,            # default: solid
-#         width    => 2,            # default: 0
-#         color    => '#ff00ff',    # default: system defined
-#    },
-#     ...
-# );
+# border => {
+#      linetype => 3,            # default: solid
+#      width    => 2,            # default: 0
+#      color    => '#ff00ff',    # default: system defined
+# },
 #
 # Remark:
 # - By default, the color of the axis tics would follow the border unless
@@ -689,6 +656,69 @@ sub _setBorder
         (defined $$border{linetype});
     $out .= " linewidth $$border{width}" if (defined $$border{width});
     $out .= " linecolor rgb \"$$border{color}\"" if (defined $$border{color});
+    return($out);
+}
+
+
+# Set title and layout of the multiplot
+sub _setMultiplot
+{
+    my ($self, $nrows, $ncols) = @_;
+
+    open(PLT, ">>$self->{_script}") || confess("Can't write $self->{_script}");
+    print PLT "set multiplot";
+    print PLT " title \"$self->{title}\"" if (defined $self->{title});
+    print PLT " layout $nrows, $ncols" if (defined $nrows);
+    print PLT "\n";
+    close(PLT);
+}
+
+
+# Set the input time format
+# - must be called after _setChart() is called
+# - called by plot2d() and plot3d()
+sub _setTimeFmt
+{
+    my ($self, @dataSet) = @_;
+
+    # Setting due to DataSet object attributes
+    open(PLT, ">>$self->{_script}") || confess("Can't write $self->{_script}");
+    foreach my $ds (@dataSet)
+    {
+        # Set the format of the time data
+        if (defined $ds->{timefmt})    # input time format
+        {
+            print PLT "set timefmt \"$ds->{timefmt}\"\n";
+            last;
+        }
+    }
+    close(PLT);
+}
+
+
+# Usage example:
+# timestamp => {
+#    fmt    => '%d/%m/%y %H:%M',
+#    offset => "10,-3"
+#    font   => "Helvetica",
+# },
+# # OR
+# timestamp => 'on';
+sub _setTimestamp
+{
+    my ($ts) = @_;
+
+    my $out = '';
+    if (ref($ts) eq 'HASH')
+    {
+        $out .= " \"$$out{fmt}\"" if (defined $$out{fmt});
+        $out .= " $$out{offset}" if (defined $$out{offset});
+        $out .= " \"$$out{font}\"" if (defined $$out{font});
+    }
+    elsif ($ts ne 'on')
+    {
+        return($ts);
+    }
     return($out);
 }
 
@@ -717,20 +747,6 @@ sub _execute
 }
 
 
-# Set title and layout of the multiplot
-sub _setMultiplot
-{
-    my ($self, $nrows, $ncols) = @_;
-
-    open(PLT, ">>$self->{_script}") || confess("Can't write $self->{_script}");
-    print PLT "set multiplot";
-    print PLT " title \"$self->{title}\"" if (defined $self->{title});
-    print PLT " layout $nrows, $ncols" if (defined $nrows);
-    print PLT "\n";
-    close(PLT);
-}
-
-
 # Unset the chart properties
 # - called by multiplot()
 sub _unset
@@ -745,6 +761,55 @@ sub _unset
 }
 
 
+# Arbitrary labels placed in the chart
+#
+# Usage example:
+# $chart->label(
+#     text       => "This is a label",
+#     position   => "0.2, 3 left",
+#     offset     => "2,2",
+#     rotate     => 45,
+#     font       => "arial, 15",
+#     fontcolor  => "dark-blue",
+#     pointtype  => 3,
+#     pointsize  => 5,
+#     pointcolor => "blue",
+# );
+#
+# TODO:
+# - support layer <front/back>
+sub label
+{
+    my ($self, %label) = @_;
+
+    my $out = "\"$label{text}\"";
+    $out .= " at $label{position}" if (defined $label{position});
+    $out .= " offset $label{offset}" if (defined $label{offset});
+    $out .= " rotate by $label{rotate}" if (defined $label{rotate});
+    $out .= " font \"$label{font}\"" if (defined $label{font});
+    $out .= " textcolor rgb \"$label{fontcolor}\"" if
+        (defined $label{fontcolor});
+    $out .= " noenhanced" if (!defined $label{enhanced} ||
+        $label{enhanced} ne 'on');
+
+    if (defined $label{pointtype} || defined $label{pointsize} ||
+        defined $label{pointcolor})
+    {
+        $out .= " point";
+        $out .= " pt ".&_pointType($label{pointtype}) if
+            (defined $label{pointtype});
+        $out .= " ps $label{pointsize}" if (defined $label{pointsize});
+        $out .= " lc $label{pointcolor}" if (defined $label{pointcolor});
+    }
+
+    my $pltTmp = $self->{_script};
+    open(PLT, ">>$pltTmp") || confess("Can't write gnuplot script $pltTmp");
+    print PLT "set label $out\n";
+    close(PLT);
+    return($self);
+}
+
+
 # Output a test image for the terminal
 #
 # Usage example:
@@ -754,10 +819,7 @@ sub test
 {
     my ($self) = @_;
 
-    # Create temporary file to store Gnuplot instructions
-    my $dirTmp = tempdir(CLEANUP => 1, DIR => '/tmp');
-    my $pltTmp = "$dirTmp/plot";
-
+    my $pltTmp = "$self->{_script}/plot";
     open(PLT, ">$pltTmp") || confess("Can't write gnuplot script $pltTmp");
     print PLT "set terminal $self->{terminal}\n";
     print PLT "set output \"$self->{output}\"\n";
@@ -956,8 +1018,8 @@ sub _thaw
                 (scalar(@$ydata) ne scalar(@$zdata));
             for (my $i = 0; $i < @$xdata; $i++)
             {
-                print DATA "$$xdata[$i] $$ydata[$i] $$zdata[$i]\n";
                 print DATA "\n" if ($i > 0 && $$xdata[$i] != $$xdata[$i-1]);
+                print DATA "$$xdata[$i] $$ydata[$i] $$zdata[$i]\n";
             }
             $string = "\"$fileTmp\"";
 
@@ -1493,6 +1555,20 @@ multi-plot such as inset chart.
 
 Origin of the chart. This is useful in some multi-plot such as inset chart.
 
+=head3 timestamp
+
+Time stamp of the plot. To place the time stamp with default setting,
+
+    timestamp => 'on'
+
+To set the format of the time stamp as well, e.g.,
+
+    timestamp => {
+       fmt    => '%d/%m/%y %H:%M',
+       offset => "10,-3"
+       font   => "Helvetica",
+    }
+
 =head3 bg (experimental)
 
 Background color of the chart. This option is experimental.
@@ -1561,6 +1637,22 @@ C<multiplot>.
 Add a 3D dataset to a chart without plotting it out immediately. Used with
 C<multiplot>.
 
+=head3 label
+
+Add an arbitrary text label. e.g.,
+
+    $chart->label(
+        text       => "This is a label",
+        position   => "0.2, 3 left",
+        offset     => "2,2",
+        rotate     => 45,
+        font       => "arial, 15",
+        fontcolor  => "dark-blue",
+        pointtype  => 3,
+        pointsize  => 5,
+        pointcolor => "blue",
+    );
+
 =head3 convert
 
     $chart->convert($imageFmt);
@@ -1612,6 +1704,23 @@ dataset may be specified optionally when the object is initiated:
 
     my $dataset = Chart::Gnuplot::DataSet->new(%options);
 
+The data source of the dataset can be specified by either one of the following
+ways:
+
+=over
+
+=item 1. Arrays of x values, y values and z values (in 3D plots) of the data
+points.
+
+=item 2. Array of data points. Each point is specified as an array of x, y, z
+coordinates
+
+=item 3. Data file.
+
+=item 4. Mathematical expression (for a function).
+
+=back
+
 =head2 Dataset Options
 
 =head3 xdata
@@ -1625,9 +1734,11 @@ If C<xdata> is omitted but C<ydata> is defined, the integer index starting from
 
 =head3 ydata
 
-The y values of the data points.
+The y values of the data points. See L<xdata>.
 
-    ydata => \@y
+=head3 zdata
+
+The z values of the data points. See L<xdata>
 
 =head3 points
 
@@ -1787,7 +1898,19 @@ Axes used in the plot. Possible values are "x1y1", "x1y2", "x2y1" and "x2y2".
 
 =head3 timefmt
 
-Time format of the input data.
+Time format of the input data. The valid format are:
+
+    %d : day of the month, 1-31
+    %m : month of the year, 1-12
+    %y : year, 2-digit, 0-99
+    %Y : year, 4-digit
+    %j : day of the year, 1-365
+    %H : hour, 0-24
+    %M : minute, 0-60
+    %s : seconds since the Unix epoch (1970-01-01 00:00 UTC)
+    %S : second, 0-60
+    %b : name of the month, 3-character abbreviation
+    %B : name of the month
 
 =head3 smooth
 
@@ -1960,6 +2083,8 @@ y-axis.
 =item 5. Add method to copy Chart and DataSet objects.
 
 =item 6. Improve the testsuite.
+
+=item 7. Reduce number of temporary files generated.
 
 =back
 

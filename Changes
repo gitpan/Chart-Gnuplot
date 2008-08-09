@@ -1,5 +1,10 @@
 Change log for Chart::Gnuplot
 
+0.04
+    - Support adding time stamp
+    - Support adding arbitrary labels
+    - Create temporary file when the chart object is created
+
 0.03
     - Support financebars and candlesticks plotting styles
     - Support setting filling the boxes and candlesticks
