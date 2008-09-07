@@ -1,5 +1,9 @@
 Change log for Chart::Gnuplot
 
+0.05
+    - Fix a bug in timestamp option
+    - Fix a typo in POD
+
 0.04
     - Support adding time stamp
     - Support adding arbitrary labels

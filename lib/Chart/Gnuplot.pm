@@ -5,7 +5,7 @@ use Carp;
 use File::Copy;
 use File::Temp qw(tempdir);
 use Chart::Gnuplot::Util qw(_lineType _pointType);
-$VERSION = 0.04;
+$VERSION = 0.05;
 
 # Constructor
 sub new
@@ -711,9 +711,9 @@ sub _setTimestamp
     my $out = '';
     if (ref($ts) eq 'HASH')
     {
-        $out .= " \"$$out{fmt}\"" if (defined $$out{fmt});
-        $out .= " $$out{offset}" if (defined $$out{offset});
-        $out .= " \"$$out{font}\"" if (defined $$out{font});
+        $out .= " \"$$ts{fmt}\"" if (defined $$ts{fmt});
+        $out .= " $$ts{offset}" if (defined $$ts{offset});
+        $out .= " \"$$ts{font}\"" if (defined $$ts{font});
     }
     elsif ($ts ne 'on')
     {
@@ -1565,7 +1565,7 @@ To set the format of the time stamp as well, e.g.,
 
     timestamp => {
        fmt    => '%d/%m/%y %H:%M',
-       offset => "10,-3"
+       offset => "10,-3",
        font   => "Helvetica",
     }
 
