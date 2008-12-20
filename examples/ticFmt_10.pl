@@ -4,9 +4,10 @@ use Chart::Gnuplot;
 
 my $chart = Chart::Gnuplot->new(
     output => "gallery/ticFmt_10.png",
-    xlabel => "No tics on the x2-axis",
+    xlabel => "Longer tics",
     xtics  => {
-        mirror => 'off',
+        length => "5, 3",
+        minor  => 4,
     },
 );
 

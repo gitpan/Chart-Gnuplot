@@ -5,7 +5,7 @@ use Carp;
 use File::Copy;
 use File::Temp qw(tempdir);
 use Chart::Gnuplot::Util qw(_lineType _pointType);
-$VERSION = 0.05;
+$VERSION = 0.06;
 
 # Constructor
 sub new
@@ -15,8 +15,19 @@ sub new
     # Create temporary file to store Gnuplot instructions
     if (!defined $hash{_multiplot})     # if not in multiplot mode
     {
-        my $dirTmp = tempdir(CLEANUP => 1, DIR => '/tmp');
-        $hash{_script} = "$dirTmp/plot";
+        my $baseTmp = '/tmp';
+        if (defined $ENV{TMP})
+        {
+            $baseTmp = $ENV{TMP};
+        }
+        elsif (defined $ENV{TEMP})
+        {
+            $baseTmp = $ENV{TEMP};
+        }
+
+        my $dirTmp = tempdir(CLEANUP => 1, DIR => $baseTmp);
+        ($^O eq 'MSWin32')? ($dirTmp .= '\\'): ($dirTmp .= '/');
+        $hash{_script} = $dirTmp . "plot";
     }
 
     # Default terminal: postscript terminal with color drawing elements
@@ -95,12 +106,11 @@ sub plot2d
 {
     my ($self, @dataSet) = @_;
     &_setChart($self);
-    &_setTimeFmt($self, @dataSet);
 
-    open(PLT, ">>$self->{_script}") || confess("Can't write $self->{_script}");
-    print PLT "\nplot ";
-    print PLT join(', ', map {$_->_thaw} @dataSet), "\n";
-    close(PLT);
+    my $plotString = join(', ', map {$_->_thaw($self)} @dataSet);
+    open(GPH, ">>$self->{_script}") || confess("Can't write $self->{_script}");
+    print GPH "\nplot $plotString\n";
+    close(GPH);
 
     # Generate image file
     &_execute($self);
@@ -118,11 +128,10 @@ sub plot3d
 {
     my ($self, @dataSet) = @_;
     &_setChart($self);
-    &_setTimeFmt($self, @dataSet);
 
+    my $plotString = join(', ', map {$_->_thaw($self)} @dataSet);
     open(GPH, ">>$self->{_script}") || confess("Can't write $self->{_script}");
-    print GPH "\nsplot ";
-    print GPH join(', ', map {$_->_thaw} @dataSet), "\n";
+    print GPH "\nsplot $plotString\n";
     close(GPH);
 
     # Generate image file
@@ -136,7 +145,7 @@ sub multiplot
 {
     my ($self, @charts) = @_;
     my $set = &_setChart($self);
-    &_unset($self, $set);
+    &_reset($self, $set);
 
     open(PLT, ">>$self->{_script}") || confess("Can't write $self->{_script}");
 
@@ -165,27 +174,25 @@ sub multiplot
                 if (defined $chart->{_dataSets2D})
                 {
                     my @dataSet = @{$chart->{_dataSets2D}};
-                    &_setTimeFmt($chart, @dataSet);
                 
                     open(PLT, ">>$self->{_script}") ||
                         confess("Can't write $self->{_script}");
                     print PLT "\nplot ";
-                    print PLT join(', ', map {$_->_thaw} @dataSet), "\n";
+                    print PLT join(', ', map {$_->_thaw($self)} @dataSet), "\n";
                     close(PLT);
                 }
                 elsif (defined $chart->{_dataSets3D})
                 {
                     my @dataSet = @{$chart->{_dataSets3D}};
-                    &_setTimeFmt($chart, @dataSet);
                 
                     open(PLT, ">>$self->{_script}") ||
                         confess("Can't write $self->{_script}");
                     print PLT "\nsplot ";
-                    print PLT join(', ', map {$_->_thaw} @dataSet), "\n";
+                    print PLT join(', ', map {$_->_thaw($self)} @dataSet), "\n";
                     close(PLT);
                 }
 
-                &_unset($chart, $set);
+                &_reset($chart, $set);
             }
         }
     }
@@ -203,27 +210,25 @@ sub multiplot
             if (defined $chart->{_dataSets2D})
             {
                 my @dataSet = @{$chart->{_dataSets2D}};
-                &_setTimeFmt($chart, @dataSet);
             
                 open(PLT, ">>$self->{_script}") ||
                     confess("Can't write $self->{_script}");
                 print PLT "\nplot ";
-                print PLT join(', ', map {$_->_thaw} @dataSet), "\n";
+                print PLT join(', ', map {$_->_thaw($self)} @dataSet), "\n";
                 close(PLT);
             }
             elsif (defined $chart->{_dataSets3D})
             {
                 my @dataSet = @{$chart->{_dataSets3D}};
-                &_setTimeFmt($chart, @dataSet);
             
                 open(PLT, ">>$self->{_script}") ||
                     confess("Can't write $self->{_script}");
                 print PLT "\nsplot ";
-                print PLT join(', ', map {$_->_thaw} @dataSet), "\n";
+                print PLT join(', ', map {$_->_thaw($self)} @dataSet), "\n";
                 close(PLT);
             }
         
-            &_unset($chart, $set);
+            &_reset($chart, $set);
         }
     }
     close(PLT);
@@ -356,14 +361,21 @@ sub _setChart
                 {
                     print PLT "set format $axis ".
                         "\"${$self->{$attr}}{labelfmt}\"\n";
+                    push(@sets, 'format');
                 }
                 if (defined ${$self->{$attr}}{minor})
                 {
                     my $nTics = ${$self->{$attr}}{minor}+1;
                     print PLT "set m$axis"."tics $nTics\n";
+                    push(@sets, "m$axis"."tics");
                 }
             }
             push(@sets, $attr);
+        }
+        elsif ($attr eq 'legend')
+        {
+            print PLT "set key".&_setLegend($self->{legend})."\n";
+            push(@sets, 'key');
         }
         elsif ($attr eq 'border')
         {
@@ -660,6 +672,92 @@ sub _setBorder
 }
 
 
+# Format the legend (key)
+#
+# Usage example:
+# legend => {
+#    position => "outside bottom",
+#    width    => 3,
+#    height   => 4,
+#    align    => "right",
+#    order    => "horizontal reverse",
+#    title    => "Title of the legend",
+#    sample   => {
+#        length   => 3,
+#        position => "left",
+#        spacing  => 2,
+#    },
+#    border   => {
+#        linetype => 2,
+#        width    => 1,
+#        color    => "blue",
+#    },
+# },
+sub _setLegend
+{
+    my ($legend) = @_;
+
+    my $out = '';
+    if (defined $$legend{position})
+    {
+        ($$legend{position} =~ /\d/)? ($out .= " at $$legend{position}"):
+            ($out .= " $$legend{position}");
+    }
+    $out .= " width $$legend{width}" if (defined $$legend{width});
+    $out .= " height $$legend{height}" if (defined $$legend{height});
+    if (defined $$legend{align})
+    {
+        $out .= " Left" if ($$legend{align} eq 'left');
+        $out .= " Right" if ($$legend{align} eq 'right');
+    }
+    if (defined $$legend{order})
+    {
+        my $order = $$legend{order};
+        $order =~ s/reverse/invert/;
+        $out .= " $order";
+    }
+    if (defined $$legend{title})
+    {
+        if (ref($$legend{title}) eq 'HASH')
+        {
+            my $title = $$legend{title};
+            $out .= " title \"$$title{text}\"";
+            $out .= " noenhanced" if (!defined $$title{enhanced} ||
+                $$title{enhanced} ne 'on');
+        }
+        else
+        {
+            $out .= " title \"$$legend{title}\" noenhanced";
+        }
+    }
+    if (defined $$legend{sample})
+    {
+        $out .= " samplen $$legend{sample}{length}" if
+            (defined $$legend{sample}{length});
+        $out .= " reverse" if (defined $$legend{sample}{position} ||
+            $$legend{sample}{position} eq "left");
+        $out .= " spacing $$legend{sample}{spacing}" if
+            (defined $$legend{sample}{spacing});
+    }
+    if (defined $$legend{border})
+    {
+        if (ref($$legend{border}) eq 'HASH')
+        {
+            $out .= " box ".&_setBorder($$legend{border});
+        }
+        elsif ($$legend{border} eq "off")
+        {
+            $out .= " no box";
+        }
+        elsif ($$legend{border} eq "on")
+        {
+            $out .= " box";
+        }
+    }
+    return($out);
+}
+
+
 # Set title and layout of the multiplot
 sub _setMultiplot
 {
@@ -670,28 +768,6 @@ sub _setMultiplot
     print PLT " title \"$self->{title}\"" if (defined $self->{title});
     print PLT " layout $nrows, $ncols" if (defined $nrows);
     print PLT "\n";
-    close(PLT);
-}
-
-
-# Set the input time format
-# - must be called after _setChart() is called
-# - called by plot2d() and plot3d()
-sub _setTimeFmt
-{
-    my ($self, @dataSet) = @_;
-
-    # Setting due to DataSet object attributes
-    open(PLT, ">>$self->{_script}") || confess("Can't write $self->{_script}");
-    foreach my $ds (@dataSet)
-    {
-        # Set the format of the time data
-        if (defined $ds->{timefmt})    # input time format
-        {
-            print PLT "set timefmt \"$ds->{timefmt}\"\n";
-            last;
-        }
-    }
     close(PLT);
 }
 
@@ -749,13 +825,14 @@ sub _execute
 
 # Unset the chart properties
 # - called by multiplot()
-sub _unset
+sub _reset
 {
     my ($self, $set) = @_;
     open(PLT, ">>$self->{_script}") || confess("Can't write $self->{_script}");
     foreach my $opt (@$set)
     {
         print PLT "unset $opt\n";
+        print PLT "set $opt\n";
     }
     close(PLT);
 }
@@ -819,7 +896,7 @@ sub test
 {
     my ($self) = @_;
 
-    my $pltTmp = "$self->{_script}/plot";
+    my $pltTmp = "$self->{_script}";
     open(PLT, ">$pltTmp") || confess("Can't write gnuplot script $pltTmp");
     print PLT "set terminal $self->{terminal}\n";
     print PLT "set output \"$self->{output}\"\n";
@@ -892,7 +969,7 @@ sub convert
 # $chart->plot2d($data)->png;
 sub png
 {
-    my ($self);
+    my $self = shift;
     &convert($self, 'png');
     return($self)
 }
@@ -906,7 +983,7 @@ sub png
 # $chart->plot2d($data)->gif;
 sub gif
 {
-    my ($self);
+    my $self = shift;
     &convert($self, 'gif');
     return($self)
 }
@@ -920,7 +997,7 @@ sub gif
 # $chart->plot2d($data)->jpg;
 sub jpg
 {
-    my ($self);
+    my $self = shift;
     &convert($self, 'jpg');
     return($self)
 }
@@ -934,7 +1011,7 @@ sub jpg
 # $chart->plot2d($data)->ps;
 sub ps
 {
-    my ($self);
+    my $self = shift;
     &convert($self, 'ps');
     return($self)
 }
@@ -948,12 +1025,12 @@ sub ps
 # $chart->plot2d($data)->pdf;
 sub pdf
 {
-    my ($self);
+    my $self = shift;
     &convert($self, 'pdf');
     return($self)
 }
 
-################## Chart::Gnuplot::DataSet object ##################
+################## Chart::Gnuplot::DataSet class ##################
 
 package Chart::Gnuplot::DataSet;
 use strict;
@@ -965,6 +1042,14 @@ use Chart::Gnuplot::Util qw(_lineType _pointType);
 sub new
 {
     my ($class, %hash) = @_;
+    my $baseTmp = '/tmp';
+    $baseTmp = $ENV{TMP} if (defined $ENV{TMP});
+    $baseTmp = $ENV{TEMP} if (defined $ENV{TEMP});
+
+    my $dirTmp = tempdir(CLEANUP => 1, DIR => $baseTmp);
+    ($^O eq 'MSWin32')? ($dirTmp .= '\\'): ($dirTmp .= '/');
+    $hash{_data} = $dirTmp . "data";
+
     my $self = \%hash;
     return bless($self, $class);
 }
@@ -992,7 +1077,7 @@ sub AUTOLOAD
 # - zdata
 sub _thaw
 {
-    my ($self) = @_;
+    my ($self, $chart) = @_;
     my $string;
 
     # Data points stored in arrays
@@ -1002,8 +1087,7 @@ sub _thaw
         my $ydata = $self->{ydata};
 
         # Create temporary file to store Perl data
-        my $dirTmp = tempdir(CLEANUP => 1, DIR => '/tmp');
-        my $fileTmp = "$dirTmp/data";
+        my $fileTmp = $self->{_data};
         open(DATA, ">$fileTmp") || confess("Can't write data to temp file");
 
         # Process 3D data set
@@ -1026,6 +1110,11 @@ sub _thaw
             # Construst using statement for date-time data
             if (defined $self->{timefmt})
             {
+                open(PLT, ">>$chart->{_script}") ||
+                    confess("Can't write $chart->{_script}");
+                print PLT "set timefmt \"$self->{timefmt}\"\n";
+                close(PLT);
+
                 my @a = split(/\s+/, $$xdata[0]);
                 my $yCol = scalar(@a) + 1;
                 $string .= " using 1:$yCol";
@@ -1054,6 +1143,11 @@ sub _thaw
             # Construst using statement for date-time data
             if (defined $self->{timefmt})
             {
+                open(PLT, ">>$chart->{_script}") ||
+                    confess("Can't write $chart->{_script}");
+                print PLT "set timefmt \"$self->{timefmt}\"\n";
+                close(PLT);
+
                 my @a = split(/\s+/, $$xdata[0]);
                 my $yCol = scalar(@a) + 1;
                 $string .= " using 1:$yCol";
@@ -1141,6 +1235,11 @@ sub _thaw
             # Construst using statement for date-time data
             if (defined $self->{timefmt})
             {
+                open(PLT, ">>$chart->{_script}") ||
+                    confess("Can't write $chart->{_script}");
+                print PLT "set timefmt \"$self->{timefmt}\"\n";
+                close(PLT);
+
                 my ($xTmp) = (ref($$xdata[0]) eq 'ARRAY')? ($$xdata[0][0]):
                     ($$xdata[0]);
                 my @a = split(/\s+/, $xTmp);
@@ -1164,6 +1263,11 @@ sub _thaw
             # Construst using statement for date-time data
             if (defined $self->{timefmt})
             {
+                open(PLT, ">>$chart->{_script}") ||
+                    confess("Can't write $chart->{_script}");
+                print PLT "set timefmt \"$self->{timefmt}\"\n";
+                close(PLT);
+
                 my @a = split(/\s+/, $$xdata[0]);
                 my $yCol = scalar(@a) + 1;
                 $string .= " using 1:$yCol";
@@ -1205,7 +1309,15 @@ sub _thaw
                 }
             }
             $string = "\"$fileTmp\"";
-            $string .= " using 1:2" if (defined $self->{timefmt});
+            if (defined $self->{timefmt})
+            {
+                open(PLT, ">>$chart->{_script}") ||
+                    confess("Can't write $chart->{_script}");
+                print PLT "set timefmt \"$self->{timefmt}\"\n";
+                close(PLT);
+
+                $string .= " using 1:2";
+            }
         }
 
         close(DATA);
@@ -1245,6 +1357,11 @@ sub _thaw
         # Construst using statement for date-time data
         if (defined $self->{timefmt})
         {
+            open(PLT, ">>$chart->{_script}") ||
+                confess("Can't write $chart->{_script}");
+            print PLT "set timefmt \"$self->{timefmt}\"\n";
+            close(PLT);
+
             my @a = split(/\s+/, $$pt[0][0]);
             my $yCol = scalar(@a) + 1;
             $string .= " using 1:$yCol";
@@ -1497,6 +1614,42 @@ The tics and tic label of the x2-axis.
 =head3 y2tics
 
 The tics and tic label of the y2-axis.
+
+=head3 legend
+
+Legend describing the plots. Supported properties are:
+
+    position : position of the legend
+    width    : number of character widths to be added or subtracted to the
+             : region of the legend
+    height   : number of character heights to be added or subtracted to the
+             : region of the legend
+    align    : alignment of the text label. Left or right (default)
+    order    : order of the keys
+    title    : title of the legend
+    sample   : format of the sample lines
+    border   : border of the legend. See L<border> for available options
+
+E.g.
+
+    legend => {
+       position => "outside bottom",
+       width    => 3,
+       height   => 4,
+       align    => "right",
+       order    => "horizontal reverse",
+       title    => "Title of the legend",
+       sample   => {
+           length   => 3,
+           position => "left",
+           spacing  => 2,
+       },
+       border   => {
+           linetype => 2,
+           width    => 1,
+           color    => "blue",
+       },
+    }
 
 =head3 timeaxis
 
@@ -2076,21 +2229,23 @@ y-axis.
 
 =item 2. Add more control to the 3D plots.
 
-=item 3. Add more control to the legend.
+=item 3. Add curve fitting method.
 
-=item 4. Add curve fitting method.
+=item 4. Add method to copy Chart and DataSet objects.
 
-=item 5. Add method to copy Chart and DataSet objects.
+=item 5. Improve the testsuite.
 
-=item 6. Improve the testsuite.
-
-=item 7. Reduce number of temporary files generated.
+=item 6. Reduce number of temporary files generated.
 
 =back
 
 =head1 REQUIREMENTS
 
 L<File::Copy>, L<File::Temp>
+
+Gnuplot L<http://www.gnuplot.info>
+
+ImageMagick L<http://www.imagemagick.org> (for full feature)
 
 =head1 TEST ENVIRONMENT
 
@@ -2100,8 +2255,6 @@ Linux.
 =head1 SEE ALSO
 
 Gnuplot official website L<http://www.gnuplot.info>
-
-L<Chart::Graph::Gnuplot>
 
 =head1 AUTHOR
 

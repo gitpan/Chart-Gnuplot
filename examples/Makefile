@@ -44,6 +44,16 @@ grid_6.png \
 grid_7.png \
 grid_8.png \
 grid_9.png \
+legend_1.png \
+legend_2.png \
+legend_3.png \
+legend_4.png \
+legend_5.png \
+legend_6.png \
+legend_7.png \
+legend_8.png \
+legend_9.png \
+legend_10.png \
 lineStyle_1.png \
 lineStyle_2.png \
 lineStyle_3.png \
@@ -85,6 +95,7 @@ ticFmt_9.png \
 ticFmt_10.png \
 ticFmt_11.png \
 ticFmt_12.png \
+ticFmt_13.png \
 
 all: mkdir $(IMAGES)
 

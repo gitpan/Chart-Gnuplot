@@ -4,9 +4,9 @@ use Chart::Gnuplot;
 
 my $chart = Chart::Gnuplot->new(
     output => "gallery/ticFmt_7.png",
-    xlabel => "Shifted tic label",
+    xlabel => "Red tic label",
     xtics  => {
-        offset => "8, -1"
+        fontcolor => "red",
     },
 );
 

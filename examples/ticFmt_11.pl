@@ -4,8 +4,10 @@ use Chart::Gnuplot;
 
 my $chart = Chart::Gnuplot->new(
     output => "gallery/ticFmt_11.png",
-    title => "Turn on the tics on the y2-axis",
-    y2tics => "on",
+    xlabel => "No tics on the x2-axis",
+    xtics  => {
+        mirror => 'off',
+    },
 );
 
 my $dataSet = Chart::Gnuplot::DataSet->new(

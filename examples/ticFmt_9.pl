@@ -4,10 +4,9 @@ use Chart::Gnuplot;
 
 my $chart = Chart::Gnuplot->new(
     output => "gallery/ticFmt_9.png",
-    xlabel => "Longer tics",
-    xtics  => {
-        length => "5, 3",
-        minor  => 4,
+    ylabel => "Rotated tic label by 45 deg",
+    ytics  => {
+        rotate => '45',
     },
 );
 

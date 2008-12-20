@@ -1,7 +1,15 @@
 Change log for Chart::Gnuplot
 
+0.06
+    - Support formatting legend
+    - Fix an error that causes some options of one chart affects other charts
+      in multiplot.
+    - Fix an error in image format conversion.
+    - Better support of MSWin
+
 0.05
-    - Fix a bug in timestamp option
+    - Fix a bug in timestamp option.
+      (Thanks to Lou King)
     - Fix a typo in POD
 
 0.04

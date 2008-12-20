@@ -50,6 +50,16 @@ examples/grid_6.pl
 examples/grid_7.pl
 examples/grid_8.pl
 examples/grid_9.pl
+examples/legend_1.pl
+examples/legend_2.pl
+examples/legend_3.pl
+examples/legend_4.pl
+examples/legend_5.pl
+examples/legend_6.pl
+examples/legend_7.pl
+examples/legend_8.pl
+examples/legend_9.pl
+examples/legend_10.pl
 examples/lineStyle_1.pl
 examples/lineStyle_2.pl
 examples/lineStyle_3.pl
@@ -91,6 +101,7 @@ examples/ticFmt_9.pl
 examples/ticFmt_10.pl
 examples/ticFmt_11.pl
 examples/ticFmt_12.pl
+examples/ticFmt_13.pl
 examples/index.html
 examples/dataSrc_3.dat
 examples/plot3d_3.dat

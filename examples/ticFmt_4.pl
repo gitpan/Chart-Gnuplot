@@ -4,9 +4,9 @@ use Chart::Gnuplot;
 
 my $chart = Chart::Gnuplot->new(
     output => "gallery/ticFmt_4.png",
-    xlabel => "Tic labels in times-italic",
+    xlabel => "Number format with 2 decimal places",
     xtics  => {
-        font => "Times-Italic",
+        labelfmt => '%.2f',
     },
 );
 

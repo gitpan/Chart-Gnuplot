@@ -4,9 +4,9 @@ use Chart::Gnuplot;
 
 my $chart = Chart::Gnuplot->new(
     output => "gallery/ticFmt_3.png",
-    xlabel => "Number format with 2 decimal places",
+    xlabel => "Re-label the tics",
     xtics  => {
-        labelfmt => '%.2f',
+        labels => ['"pi" 3.1416', '"-pi" -3.1416'],
     },
 );
 
