@@ -1,5 +1,11 @@
 Change log for Chart::Gnuplot
 
+0.07
+    - Support user-specified path of the convert program
+    - Support plotting parametric functions
+    - Fix a bug that range does not work if axis is date/time
+      (Thanks to Holyspell)
+
 0.06
     - Support formatting legend
     - Fix an error that causes some options of one chart affects other charts

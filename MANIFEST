@@ -38,6 +38,7 @@ examples/dataSrc_2.pl
 examples/dataSrc_3.pl
 examples/dataSrc_4.pl
 examples/dataSrc_5.pl
+examples/dataSrc_6.pl
 examples/datetime_1.pl
 examples/datetime_2.pl
 examples/datetime_3.pl
@@ -89,6 +90,7 @@ examples/plotStyle_12.pl
 examples/plotStyle_13.pl
 examples/range_1.pl
 examples/range_2.pl
+examples/range_3.pl
 examples/ticFmt_1.pl
 examples/ticFmt_2.pl
 examples/ticFmt_3.pl

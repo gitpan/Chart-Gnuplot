@@ -32,6 +32,7 @@ dataSrc_2.png \
 dataSrc_3.png \
 dataSrc_4.png \
 dataSrc_5.png \
+dataSrc_6.png \
 datetime_1.png \
 datetime_2.png \
 datetime_3.png \
@@ -83,6 +84,7 @@ plotStyle_12.png \
 plotStyle_13.png \
 range_1.png \
 range_2.png \
+range_3.png \
 ticFmt_1.png \
 ticFmt_2.png \
 ticFmt_3.png \

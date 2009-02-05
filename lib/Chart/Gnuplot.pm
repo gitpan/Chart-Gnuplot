@@ -5,7 +5,7 @@ use Carp;
 use File::Copy;
 use File::Temp qw(tempdir);
 use Chart::Gnuplot::Util qw(_lineType _pointType);
-$VERSION = 0.06;
+$VERSION = 0.07;
 
 # Constructor
 sub new
@@ -105,7 +105,7 @@ sub add {&add2d(@_);}
 sub plot2d
 {
     my ($self, @dataSet) = @_;
-    &_setChart($self);
+    &_setChart($self, \@dataSet);
 
     my $plotString = join(', ', map {$_->_thaw($self)} @dataSet);
     open(GPH, ">>$self->{_script}") || confess("Can't write $self->{_script}");
@@ -127,7 +127,7 @@ sub plot2d
 sub plot3d
 {
     my ($self, @dataSet) = @_;
-    &_setChart($self);
+    &_setChart($self, \@dataSet);
 
     my $plotString = join(', ', map {$_->_thaw($self)} @dataSet);
     open(GPH, ">>$self->{_script}") || confess("Can't write $self->{_script}");
@@ -170,28 +170,25 @@ sub multiplot
                 $chart->_script($self->{_script});
                 $chart->_multiplot(1);
 
-                my $set = &_setChart($chart);
+                my $plot;
+                my @dataSet;
                 if (defined $chart->{_dataSets2D})
                 {
-                    my @dataSet = @{$chart->{_dataSets2D}};
-                
-                    open(PLT, ">>$self->{_script}") ||
-                        confess("Can't write $self->{_script}");
-                    print PLT "\nplot ";
-                    print PLT join(', ', map {$_->_thaw($self)} @dataSet), "\n";
-                    close(PLT);
+                    $plot = 'plot';
+                    @dataSet = @{$chart->{_dataSets2D}};
                 }
                 elsif (defined $chart->{_dataSets3D})
                 {
-                    my @dataSet = @{$chart->{_dataSets3D}};
-                
-                    open(PLT, ">>$self->{_script}") ||
-                        confess("Can't write $self->{_script}");
-                    print PLT "\nsplot ";
-                    print PLT join(', ', map {$_->_thaw($self)} @dataSet), "\n";
-                    close(PLT);
+                    $plot = 'splot';
+                    @dataSet = @{$chart->{_dataSets3D}};
                 }
 
+                my $set = &_setChart($chart, \@dataSet);
+                open(PLT, ">>$self->{_script}") ||
+                    confess("Can't write $self->{_script}");
+                print PLT "\n$plot ";
+                print PLT join(', ', map {$_->_thaw($self)} @dataSet), "\n";
+                close(PLT);
                 &_reset($chart, $set);
             }
         }
@@ -206,28 +203,25 @@ sub multiplot
             $chart->_script($self->{_script});
             $chart->_multiplot(1);
 
-            my $set = &_setChart($chart);
+            my $plot;
+            my @dataSet;
             if (defined $chart->{_dataSets2D})
             {
-                my @dataSet = @{$chart->{_dataSets2D}};
-            
-                open(PLT, ">>$self->{_script}") ||
-                    confess("Can't write $self->{_script}");
-                print PLT "\nplot ";
-                print PLT join(', ', map {$_->_thaw($self)} @dataSet), "\n";
-                close(PLT);
+                $plot = 'plot';
+                @dataSet = @{$chart->{_dataSets2D}};
             }
             elsif (defined $chart->{_dataSets3D})
             {
-                my @dataSet = @{$chart->{_dataSets3D}};
-            
-                open(PLT, ">>$self->{_script}") ||
-                    confess("Can't write $self->{_script}");
-                print PLT "\nsplot ";
-                print PLT join(', ', map {$_->_thaw($self)} @dataSet), "\n";
-                close(PLT);
+                $plot = 'splot';
+                @dataSet = @{$chart->{_dataSets3D}};
             }
         
+            my $set = &_setChart($chart, \@dataSet);
+            open(PLT, ">>$self->{_script}") ||
+                confess("Can't write $self->{_script}");
+            print PLT "\n$plot ";
+            print PLT join(', ', map {$_->_thaw($self)} @dataSet), "\n";
+            close(PLT);
             &_reset($chart, $set);
         }
     }
@@ -258,7 +252,7 @@ sub command
 # - called by plot2d() and plot3d()
 sub _setChart
 {
-    my ($self) = @_;
+    my ($self, $dataSets) = @_;
     my @sets = ();
 
     # Orientation
@@ -276,6 +270,7 @@ sub _setChart
     # Prevent changing terminal in multiplot mode
     delete $self->{terminal} if (defined $self->{_multiplot});
 
+    # Start writing gnuplot script
     my $pltTmp = $self->{_script};
     open(PLT, ">>$pltTmp") || confess("Can't write gnuplot script $pltTmp");
 
@@ -317,6 +312,32 @@ sub _setChart
         }
     }
 
+    # Set date/time data
+    #
+    # For xrange to work for time-sequence, time-axis ("set xdata time")
+    # and timeformat ("set timefmt '%Y-%m-%d'") MUST be set BEFORE 
+    # the range command ("set xrange ['2009-01-01','2009-01-07']")
+    #
+    # Thanks to Holyspell
+    if (defined $self->{timeaxis})
+    {
+        my @axis = split(/,\s?/, $self->{timeaxis});
+        foreach my $axis (@axis)
+        {
+            print PLT "set $axis"."data time\n";
+            push(@sets, $axis."data");
+        }
+
+        foreach my $ds (@$dataSets)
+        {
+            if (defined $ds->{timefmt})
+            {
+                print PLT "set timefmt \"$ds->{timefmt}\"\n";
+                last;
+            }
+        }
+    }
+
     # Loop and process other chart options
     foreach my $attr (keys %$self)
     {
@@ -334,12 +355,20 @@ sub _setChart
             print PLT "set $attr ".&_setAxisLabel($self->{$attr})."\n";
             push(@sets, $attr);
         }
-        elsif ($attr =~ /^((x|y)2?|z)range$/)
+        elsif ($attr =~ /^((x|y)2?|z|t|u|v)range$/)
         {
             if (ref($self->{$attr}) eq 'ARRAY')
             {
                 # Deal with ranges from array reference
-                print PLT "set $attr [". join(':', @{$self->{$attr}}) . "]\n";
+                if (defined $self->{timeaxis})
+                {
+                    print PLT "set $attr ['".join("':'", @{$self->{$attr}}).
+                        "']\n";
+                }
+                else
+                {
+                    print PLT "set $attr [".join(":", @{$self->{$attr}})."]\n";
+                }
             }
             elsif ($self->{$attr} eq 'reverse')
             {
@@ -392,20 +421,20 @@ sub _setChart
             print PLT "set timestamp".&_setTimestamp($self->{timestamp})."\n";
             push(@sets, 'timestamp');
         }
-        elsif ($attr eq 'timeaxis')
-        {
-            my @axis = split(/,\s?/, $self->{timeaxis});
-            foreach my $axis (@axis)
-            {
-                print PLT "set $axis"."data time\n";
-                push(@sets, $axis."data");
-            }
-        }
         elsif ($attr eq 'terminal')
         {
             print PLT "set $attr $self->{$attr}\n";
         }
-        elsif ($attr !~ /^(gnuplot|imagesize|orient|bg|plotbg)$/ &&
+        # Non-gnuplot options
+        elsif (!grep(/^$attr$/, qw(
+                gnuplot
+                convert
+                imagesize
+                orient
+                bg
+                plotbg
+                timeaxis
+            )) &&
             $attr !~ /^_/)
         {
             (defined $self->{$attr} && $self->{$attr} ne '')?
@@ -943,14 +972,18 @@ sub convert
     }
     else
     {
+        # Execute gnuplot
+        my $convert = 'convert';
+        $convert = $self->{convert} if (defined $self->{convert});
+
         # Rotate 90 deg for landscape image
         if (defined $self->{orient} && $self->{orient} eq 'portrait')
         {
-            system("convert $temp $temp".".$imgfmt");
+            system("$convert $temp $temp".".$imgfmt");
         }
         else
         {
-            system("convert -rotate 90 $temp $temp".".$imgfmt");
+            system("$convert -rotate 90 $temp $temp".".$imgfmt");
         }
     }
 
@@ -1110,11 +1143,6 @@ sub _thaw
             # Construst using statement for date-time data
             if (defined $self->{timefmt})
             {
-                open(PLT, ">>$chart->{_script}") ||
-                    confess("Can't write $chart->{_script}");
-                print PLT "set timefmt \"$self->{timefmt}\"\n";
-                close(PLT);
-
                 my @a = split(/\s+/, $$xdata[0]);
                 my $yCol = scalar(@a) + 1;
                 $string .= " using 1:$yCol";
@@ -1143,11 +1171,6 @@ sub _thaw
             # Construst using statement for date-time data
             if (defined $self->{timefmt})
             {
-                open(PLT, ">>$chart->{_script}") ||
-                    confess("Can't write $chart->{_script}");
-                print PLT "set timefmt \"$self->{timefmt}\"\n";
-                close(PLT);
-
                 my @a = split(/\s+/, $$xdata[0]);
                 my $yCol = scalar(@a) + 1;
                 $string .= " using 1:$yCol";
@@ -1235,11 +1258,6 @@ sub _thaw
             # Construst using statement for date-time data
             if (defined $self->{timefmt})
             {
-                open(PLT, ">>$chart->{_script}") ||
-                    confess("Can't write $chart->{_script}");
-                print PLT "set timefmt \"$self->{timefmt}\"\n";
-                close(PLT);
-
                 my ($xTmp) = (ref($$xdata[0]) eq 'ARRAY')? ($$xdata[0][0]):
                     ($$xdata[0]);
                 my @a = split(/\s+/, $xTmp);
@@ -1263,11 +1281,6 @@ sub _thaw
             # Construst using statement for date-time data
             if (defined $self->{timefmt})
             {
-                open(PLT, ">>$chart->{_script}") ||
-                    confess("Can't write $chart->{_script}");
-                print PLT "set timefmt \"$self->{timefmt}\"\n";
-                close(PLT);
-
                 my @a = split(/\s+/, $$xdata[0]);
                 my $yCol = scalar(@a) + 1;
                 $string .= " using 1:$yCol";
@@ -1311,11 +1324,6 @@ sub _thaw
             $string = "\"$fileTmp\"";
             if (defined $self->{timefmt})
             {
-                open(PLT, ">>$chart->{_script}") ||
-                    confess("Can't write $chart->{_script}");
-                print PLT "set timefmt \"$self->{timefmt}\"\n";
-                close(PLT);
-
                 $string .= " using 1:2";
             }
         }
@@ -1357,11 +1365,6 @@ sub _thaw
         # Construst using statement for date-time data
         if (defined $self->{timefmt})
         {
-            open(PLT, ">>$chart->{_script}") ||
-                confess("Can't write $chart->{_script}");
-            print PLT "set timefmt \"$self->{timefmt}\"\n";
-            close(PLT);
-
             my @a = split(/\s+/, $$pt[0][0]);
             my $yCol = scalar(@a) + 1;
             $string .= " using 1:$yCol";
@@ -1382,7 +1385,28 @@ sub _thaw
     # Function
     elsif (defined $self->{func})
     {
-        $string = "$self->{func}";
+        # Parametric function
+        if (ref($self->{func}) eq 'HASH')
+        {
+            open(PLT, ">>$chart->{_script}") ||
+                confess("Can't write $chart->{_script}");
+            print PLT "set parametric\n";
+            close(PLT);
+
+            if (defined ${$self->{func}}{z})
+            {
+                $string = "${$self->{func}}{x},${$self->{func}}{y},".
+                    "${$self->{func}}{z}";
+            }
+            else
+            {
+                $string = "${$self->{func}}{x},${$self->{func}}{y}";
+            }
+        }
+        else
+        {
+            $string = "$self->{func}";
+        }
     }
 
     # Add title for the data sets
@@ -1599,6 +1623,10 @@ Range of the secondary y-axis in the plot.
 
 Range of the z-axis in the 3D plot.
 
+=head3 trange|urange|vrange
+
+Range of the parametric parameter (t for 2D plots, while u and v for 3D plots).
+
 =head3 xtics
 
 The tics and tic label of the x-axis.
@@ -1735,6 +1763,11 @@ experimental.
 
 The path of Gnuplot installed. This option is useful if you have multiple
 versions of Gnuplot installed.
+
+=head3 convert
+
+The path of convert executable of ImageMagick. This option is useful if you
+have multiple convert executables.
 
 =head3 terminal
 
