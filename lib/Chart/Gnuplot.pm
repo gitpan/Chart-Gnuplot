@@ -5,7 +5,7 @@ use Carp;
 use File::Copy;
 use File::Temp qw(tempdir);
 use Chart::Gnuplot::Util qw(_lineType _pointType);
-$VERSION = 0.07;
+$VERSION = 0.08;
 
 # Constructor
 sub new
@@ -144,8 +144,8 @@ sub plot3d
 sub multiplot
 {
     my ($self, @charts) = @_;
-    my $set = &_setChart($self);
-    &_reset($self, $set);
+    &_setChart($self);
+    &_reset($self);
 
     open(PLT, ">>$self->{_script}") || confess("Can't write $self->{_script}");
 
@@ -183,13 +183,13 @@ sub multiplot
                     @dataSet = @{$chart->{_dataSets3D}};
                 }
 
-                my $set = &_setChart($chart, \@dataSet);
+                &_setChart($chart, \@dataSet);
                 open(PLT, ">>$self->{_script}") ||
                     confess("Can't write $self->{_script}");
                 print PLT "\n$plot ";
                 print PLT join(', ', map {$_->_thaw($self)} @dataSet), "\n";
                 close(PLT);
-                &_reset($chart, $set);
+                &_reset($chart);
             }
         }
     }
@@ -216,13 +216,13 @@ sub multiplot
                 @dataSet = @{$chart->{_dataSets3D}};
             }
         
-            my $set = &_setChart($chart, \@dataSet);
+            &_setChart($chart, \@dataSet);
             open(PLT, ">>$self->{_script}") ||
                 confess("Can't write $self->{_script}");
             print PLT "\n$plot ";
             print PLT join(', ', map {$_->_thaw($self)} @dataSet), "\n";
             close(PLT);
-            &_reset($chart, $set);
+            &_reset($chart);
         }
     }
     close(PLT);
@@ -253,6 +253,8 @@ sub command
 sub _setChart
 {
     my ($self, $dataSets) = @_;
+    return if (defined $self->{_chartSet});     # &_setChart was run already
+
     my @sets = ();
 
     # Orientation
@@ -444,7 +446,9 @@ sub _setChart
         }
     }
     close(PLT);
-    return(\@sets);
+
+    $self->_chartSet(1);
+    $self->_sets(\@sets);
 }
 
 
@@ -856,9 +860,9 @@ sub _execute
 # - called by multiplot()
 sub _reset
 {
-    my ($self, $set) = @_;
+    my ($self) = @_;
     open(PLT, ">>$self->{_script}") || confess("Can't write $self->{_script}");
-    foreach my $opt (@$set)
+    foreach my $opt (@{$self->{set}})
     {
         print PLT "unset $opt\n";
         print PLT "set $opt\n";
@@ -1118,8 +1122,6 @@ sub _thaw
     if (defined $self->{ydata})
     {
         my $ydata = $self->{ydata};
-
-        # Create temporary file to store Perl data
         my $fileTmp = $self->{_data};
         open(DATA, ">$fileTmp") || confess("Can't write data to temp file");
 
@@ -1138,7 +1140,7 @@ sub _thaw
                 print DATA "\n" if ($i > 0 && $$xdata[$i] != $$xdata[$i-1]);
                 print DATA "$$xdata[$i] $$ydata[$i] $$zdata[$i]\n";
             }
-            $string = "\"$fileTmp\"";
+            $string = "'$fileTmp'";
 
             # Construst using statement for date-time data
             if (defined $self->{timefmt})
@@ -1166,7 +1168,7 @@ sub _thaw
                 print DATA "$$xdata[$i] $$ydata[0][$i] $$ydata[1][$i] ".
                     "$$ydata[2][$i] $$ydata[3][$i]\n";
             }
-            $string = "\"$fileTmp\"";
+            $string = "'$fileTmp'";
 
             # Construst using statement for date-time data
             if (defined $self->{timefmt})
@@ -1253,7 +1255,7 @@ sub _thaw
                     }
                 }
             }
-            $string = "\"$fileTmp\"";
+            $string = "'$fileTmp'";
             
             # Construst using statement for date-time data
             if (defined $self->{timefmt})
@@ -1276,7 +1278,7 @@ sub _thaw
             {
                 print DATA "$$xdata[$i] $$ydata[$i]\n";
             }
-            $string = "\"$fileTmp\"";
+            $string = "'$fileTmp'";
 
             # Construst using statement for date-time data
             if (defined $self->{timefmt})
@@ -1321,7 +1323,7 @@ sub _thaw
                     print DATA "$i $$ydata[$i]\n";
                 }
             }
-            $string = "\"$fileTmp\"";
+            $string = "'$fileTmp'";
             if (defined $self->{timefmt})
             {
                 $string .= " using 1:2";
@@ -1334,9 +1336,7 @@ sub _thaw
     elsif (defined $self->{points})
     {
         my $pt = $self->{points};
-
-        my $dirTmp = tempdir(CLEANUP => 1, DIR => '/tmp');
-        my $fileTmp = "$dirTmp/data";
+        my $fileTmp = $self->{_data};
         open(DATA, ">$fileTmp") || confess("Can't write data to temp file");
 
         # 2D data points
@@ -1360,7 +1360,7 @@ sub _thaw
             }
         }
         close(DATA);
-        $string = "\"$fileTmp\"";
+        $string = "'$fileTmp'";
 
         # Construst using statement for date-time data
         if (defined $self->{timefmt})
@@ -1380,7 +1380,7 @@ sub _thaw
     # File
     elsif (defined $self->{datafile})
     {
-        $string = "\"$self->{datafile}\"";
+        $string = "'$self->{datafile}'";
     }
     # Function
     elsif (defined $self->{func})
@@ -2021,6 +2021,12 @@ Supported logical operations:
     or                       : ||
     if ... than else ...     : ?:, e.g., a ? b : c
 
+Parametric functions may be represented as hash. E.g.
+
+    func => {x => 'sin(t)', y => 'cos(t)'}
+
+will draw a circle.
+
 =head3 title
 
 Title of the dataset (shown in the legend).
@@ -2172,7 +2178,7 @@ y-axis.
     );
 
     my $dataSet = Chart::Gnuplot::DataSet->new(
-        file => "in.dat"
+        datafile => "in.dat"
     );
 
     $chart->plot2d($dataSet);
@@ -2282,8 +2288,7 @@ ImageMagick L<http://www.imagemagick.org> (for full feature)
 
 =head1 TEST ENVIRONMENT
 
-This version is tested against Gnuplot 4.2 patchlevel 0 and patchlevel 2 in
-Linux.
+This version is tested against Gnuplot 4.2.0 to 4.2.3 in Linux.
 
 =head1 SEE ALSO
 
@@ -2295,7 +2300,7 @@ Ka-Wai Mak <kwmak@cpan.org>
 
 =head1 COPYRIGHT
 
-Copyright (c) 2008 Ka-Wai Mak. All rights reserved.
+Copyright (c) 2008-2009 Ka-Wai Mak. All rights reserved.
 
 =head1 LICENSE
 
