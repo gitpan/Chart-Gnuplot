@@ -1,5 +1,11 @@
 Change log for Chart::Gnuplot
 
+0.09
+    - Support the "using" feature of Gnuplot
+    - Force setting character encoding before setting terminal to avoid
+      potential problem
+    - Cleaner fix for the bug of the "command()" method
+
 0.08
     - Fix a bug that plotting data does not work in MSWin
       (Thanks to Anthony Tekatch)

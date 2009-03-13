@@ -5,7 +5,7 @@ use Carp;
 use File::Copy;
 use File::Temp qw(tempdir);
 use Chart::Gnuplot::Util qw(_lineType _pointType);
-$VERSION = 0.08;
+$VERSION = 0.09;
 
 # Constructor
 sub new
@@ -237,7 +237,6 @@ sub multiplot
 sub command
 {
     my ($self, $cmd) = @_;
-    &_setChart($self);
 
     open(PLT, ">>$self->{_script}") || confess("Can't write $self->{_script}");
     print PLT "$cmd\n";
@@ -253,8 +252,6 @@ sub command
 sub _setChart
 {
     my ($self, $dataSets) = @_;
-    return if (defined $self->{_chartSet});     # &_setChart was run already
-
     my @sets = ();
 
     # Orientation
@@ -275,6 +272,15 @@ sub _setChart
     # Start writing gnuplot script
     my $pltTmp = $self->{_script};
     open(PLT, ">>$pltTmp") || confess("Can't write gnuplot script $pltTmp");
+
+    # Set character encoding
+    #
+    # Quote from Gnuplot manual:
+    # "Generally you must set the encoding before setting the terminal type."
+    if (defined $self->{encoding})
+    {
+        print PLT "set encoding $self->{encoding}\n";
+    }
 
     # Chart background color
     if (defined $self->{bg})
@@ -427,10 +433,11 @@ sub _setChart
         {
             print PLT "set $attr $self->{$attr}\n";
         }
-        # Non-gnuplot options
+        # Non-gnuplot options / options specially treated before
         elsif (!grep(/^$attr$/, qw(
                 gnuplot
                 convert
+                encoding
                 imagesize
                 orient
                 bg
@@ -447,7 +454,6 @@ sub _setChart
     }
     close(PLT);
 
-    $self->_chartSet(1);
     $self->_sets(\@sets);
 }
 
@@ -1116,6 +1122,7 @@ sub _thaw
 {
     my ($self, $chart) = @_;
     my $string;
+    my $using = '';
 
     # Data points stored in arrays
     # - in any case, ydata need to be defined
@@ -1147,11 +1154,11 @@ sub _thaw
             {
                 my @a = split(/\s+/, $$xdata[0]);
                 my $yCol = scalar(@a) + 1;
-                $string .= " using 1:$yCol";
+                $using = "1:$yCol";
 
                 my @b = split(/\s+/, $$ydata[0]);
                 my $zCol = scalar(@b) + $yCol;
-                $string .= ":$zCol";
+                $using .= ":$zCol";
             }
         }
         # Treatment for financebars and candlesticks styles
@@ -1175,7 +1182,7 @@ sub _thaw
             {
                 my @a = split(/\s+/, $$xdata[0]);
                 my $yCol = scalar(@a) + 1;
-                $string .= " using 1:$yCol";
+                $using = "1:$yCol";
             }
         }
         # Treatment for errorbars and errorlines styles
@@ -1264,7 +1271,7 @@ sub _thaw
                     ($$xdata[0]);
                 my @a = split(/\s+/, $xTmp);
                 my $yCol = scalar(@a) + 1;
-                $string .= " using 1:$yCol";
+                $using = "1:$yCol";
             }
         }
         # Normal x-y plot
@@ -1285,7 +1292,7 @@ sub _thaw
             {
                 my @a = split(/\s+/, $$xdata[0]);
                 my $yCol = scalar(@a) + 1;
-                $string .= " using 1:$yCol";
+                $using = "1:$yCol";
             }
         }
         # Only ydata is defined
@@ -1326,7 +1333,7 @@ sub _thaw
             $string = "'$fileTmp'";
             if (defined $self->{timefmt})
             {
-                $string .= " using 1:2";
+                $using = "1:2";
             }
         }
 
@@ -1367,13 +1374,13 @@ sub _thaw
         {
             my @a = split(/\s+/, $$pt[0][0]);
             my $yCol = scalar(@a) + 1;
-            $string .= " using 1:$yCol";
+            $using = "1:$yCol";
 
             if (scalar(@{$$pt[0]}) == 3)
             {
                 my @a = split(/\s+/, $$pt[0][1]);
                 my $zCol = scalar(@a) + $yCol;
-                $string .= ":$zCol";
+                $using .= ":$zCol";
             }
         }
     }
@@ -1408,6 +1415,10 @@ sub _thaw
             $string = "$self->{func}";
         }
     }
+
+    # Process the Gnuplot "using" feature
+    $using = $self->{using} if (defined $self->{using});
+    $string .= " using $using" if ($using ne '');
 
     # Add title for the data sets
     (defined $self->{title})? ($string .= " title \"$self->{title}\""):
