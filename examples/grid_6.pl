@@ -8,8 +8,12 @@ my $chart = Chart::Gnuplot->new(
         minor => 3,
     },
     grid   => {
-        linetype => "longdash, dot-longdash",
-        xlines   => "on, on"
+        linetype => "longdash",
+        xlines   => "on"
+    },
+    minorgrid   => {
+        linetype => "dot-longdash",
+        xlines   => "on"
     },
 );
 

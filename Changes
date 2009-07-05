@@ -1,5 +1,19 @@
 Change log for Chart::Gnuplot
 
+0.10
+    - Support "every" and "index" features
+    - Support control of the tics on the z-axis
+    - Change the directory for the temporary files to the default of File::Temp
+    - Fix a bug that options do not reset to their default after plotting each
+      sub-chart in multiplot
+    - Fix a bug in plotting financial time series when the x-axis is in time
+      format
+    - Fix a bug in plotting error boxes when the input data set is in "points"
+      and the x-axis is in time format
+      (Thanks to Anthony Chan)
+    - Add license session to Makefile.PL
+    - Improve POD
+
 0.09
     - Support the "using" feature of Gnuplot
     - Force setting character encoding before setting terminal to avoid

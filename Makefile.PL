@@ -9,5 +9,7 @@ WriteMakefile(
 	dist          => {
 		SUFFIX   => '.gz',
 		COMPRESS => 'gzip -f'
-	}
+	},
+
+    ($ExtUtils::MakeMaker::VERSION > 6.48)? (LICENSE => "perl"): (),
 );

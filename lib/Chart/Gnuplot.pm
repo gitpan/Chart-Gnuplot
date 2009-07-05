@@ -5,7 +5,7 @@ use Carp;
 use File::Copy;
 use File::Temp qw(tempdir);
 use Chart::Gnuplot::Util qw(_lineType _pointType);
-$VERSION = 0.09;
+$VERSION = '0.10';
 
 # Constructor
 sub new
@@ -15,17 +15,7 @@ sub new
     # Create temporary file to store Gnuplot instructions
     if (!defined $hash{_multiplot})     # if not in multiplot mode
     {
-        my $baseTmp = '/tmp';
-        if (defined $ENV{TMP})
-        {
-            $baseTmp = $ENV{TMP};
-        }
-        elsif (defined $ENV{TEMP})
-        {
-            $baseTmp = $ENV{TEMP};
-        }
-
-        my $dirTmp = tempdir(CLEANUP => 1, DIR => $baseTmp);
+        my $dirTmp = tempdir(CLEANUP => 1);
         ($^O eq 'MSWin32')? ($dirTmp .= '\\'): ($dirTmp .= '/');
         $hash{_script} = $dirTmp . "plot";
     }
@@ -169,6 +159,7 @@ sub multiplot
                 my $chart = $charts[0][$r][$c];
                 $chart->_script($self->{_script});
                 $chart->_multiplot(1);
+                delete $chart->{bg};
 
                 my $plot;
                 my @dataSet;
@@ -202,6 +193,7 @@ sub multiplot
         {
             $chart->_script($self->{_script});
             $chart->_multiplot(1);
+            delete $chart->{bg};
 
             my $plot;
             my @dataSet;
@@ -299,6 +291,7 @@ sub _setChart
             print PLT "set object rect from screen 0, screen 0 to ".
                 "screen 1, screen 1 fillcolor rgb \"$bg\" behind\n";
         }
+        push(@sets, 'object');
     }
 
     # Plot area background color
@@ -318,6 +311,7 @@ sub _setChart
             print PLT "set object rect from graph 0, graph 0 to ".
                 "graph 1, graph 1 fillcolor rgb \"$bg\" behind\n";
         }
+        push(@sets, 'object');
     }
 
     # Set date/time data
@@ -345,6 +339,19 @@ sub _setChart
             }
         }
     }
+
+    # Parametric plot
+    foreach my $ds (@$dataSets)
+    {
+        # Determine if there is paramatric plot
+        if (defined $ds->{func} && ref($ds->{func}) eq 'HASH')
+        {
+            $self->{parametric} = '';
+            last;
+        }
+    }
+
+    my $setGrid = 0;    # detect whether _setGrid has been run
 
     # Loop and process other chart options
     foreach my $attr (keys %$self)
@@ -388,7 +395,7 @@ sub _setChart
             }
             push(@sets, $attr);
         }
-        elsif ($attr =~ /^(x|y)2?tics$/)
+        elsif ($attr =~ /^(x|y|x2|y2|z)tics$/)
         {
             my ($axis) = ($attr =~ /^(.+)tics$/);
             print PLT "set $attr".&_setTics($self->{$attr})."\n";
@@ -419,10 +426,13 @@ sub _setChart
             print PLT "set border".&_setBorder($self->{border})."\n";
             push(@sets, 'border');
         }
-        elsif ($attr eq 'grid')
+        elsif ($attr =~ /^(minor)?grid$/)
         {
-            print PLT "set grid".&_setGrid($self->{grid})."\n";
+            next if ($setGrid == 1);
+
+            print PLT "set grid".&_setGrid($self)."\n";
             push(@sets, 'grid');
+            $setGrid = 1;
         }
         elsif ($attr eq 'timestamp')
         {
@@ -559,8 +569,8 @@ sub _setAxisLabel
 #    rotate    => 45,
 #    length    => "2,1",
 #    along     => 'axis',
-#    x2tics    => 'off',
 #    minor     => 3,
+#    mirror    => 'off',
 # },
 #
 # TODO
@@ -612,12 +622,24 @@ sub _setTics
 #
 # Usage example:
 # grid => {
-#      type   => 'dash, dot',        # default: dot
-#      width  => '2, 1',             # default: 0
-#      color  => 'blue, gray',       # default: black
-#      xlines => 'on, on',           # default: 'on, off'
-#      ylines => 'on, on',           # default: 'on, off'
+#     type    => 'dash, dot',        # default: dot
+#     width   => 2,              # default: 0
+#     color   => 'blue',         # default: black
+#     xlines  => 'on',           # default: on
+#     ylines  => 'off',          # default: on
+#     zlines  => 'off',          # default:
+#     x2lines => 'off',          # default: off
+#     y2lines => 'off',          # default: off
 # },
+#
+# minorgrid => {
+#     width   => 1,              # default: 0
+#     color   => 'gray',         # default: black
+#     xlines  => 'on',           # default: off
+#     ylines  => 'on',           # default: off
+#     x2lines => 'off',          # default: off
+#     y2lines => 'off',          # default: off
+# }
 #
 # # OR
 # 
@@ -625,43 +647,77 @@ sub _setTics
 #
 # TODO:
 # - support polar grid
-# - suppiort ztics
 # - support layer <front/back>
 sub _setGrid
 {
-    my ($grid) = @_;
+    my ($self) = @_;
+    my $grid = $self->{grid};
+    my $mgrid = $self->{minorgrid} if (defined $self->{minorgrid});
 
     my $out = '';
-    if (ref($grid) eq 'HASH')
+    if (ref($grid) eq 'HASH' || ref($mgrid) eq 'HASH')
     {
-        # Set whether the major and minor grid lines are drawn
+        $grid = &_gridString2Hash($grid);
+        $mgrid = &_gridString2Hash($mgrid);
+
+        # Set whether the major grid lines are drawn
         (defined $$grid{xlines} && $$grid{xlines} =~ /^off/)?
             ($out .= " noxtics"): ($out .= " xtics");
         (defined $$grid{ylines} && $$grid{ylines} =~ /^off/)?
             ($out .= " noytics"): ($out .= " ytics");
-        (defined $$grid{xlines} && $$grid{xlines} =~ /,\s?on$/)?
-            ($out .= " mxtics"): ($out .= " nomxtics");
-        (defined $$grid{ylines} && $$grid{ylines} =~ /,\s?on$/)?
-            ($out .= " mytics"): ($out .= " nomytics");
-        
+        (defined $$grid{zlines} && $$grid{zlines} =~ /^off/)?
+            ($out .= " noztics"): ($out .= " ztics");
+
+        # Set whether the vertical minor grid lines are drawn
+        $out .= " mxtics" if ( (defined $$grid{xlines} &&
+            $$grid{xlines} =~ /,\s?on$/) ||
+            (defined $self->{minorgrid} && (!defined $$mgrid{xlines} ||
+            $$mgrid{xlines} eq 'on')) );
+
+        # Set whether the horizontal minor grid lines are drawn
+        $out .= " mytics" if ( (defined $$grid{ylines} &&
+            $$grid{ylines} =~ /,\s?on$/) ||
+            (defined $mgrid && (!defined $$mgrid{ylines} ||
+            $$mgrid{ylines} eq 'on')) );
+
+        # Major grid on secondary axes
+        $out .= " x2tics" if (defined $$grid{x2lines} &&
+            $$grid{x2lines} eq 'on');
+        $out .= " y2tics" if (defined $$grid{y2lines} &&
+            $$grid{y2lines} eq 'on');
+
+        # Minor grid on secondary axes
+        $out .= " mx2tics" if (defined $$mgrid{x2lines} &&
+            $$mgrid{x2lines} eq 'on');
+        $out .= " my2tics" if (defined $$mgrid{y2lines} &&
+            $$mgrid{y2lines} eq 'on');
+
         # Set the line type of the grid lines
         my $major = my $minor = '';
+        my $majorType = my $minorType = 4;  # dotted lines
         if (defined $$grid{linetype})
         {
-            my $majorType = my $minorType = $$grid{linetype};
+            $majorType = $minorType = $$grid{linetype};
             ($majorType, $minorType) = split(/\,\s?/, $$grid{linetype}) if
                 ($$grid{linetype} =~ /\,/);
-            $major .= " linetype ".&_lineType($majorType);
-            $minor .= " linetype ".&_lineType($minorType);
         }
+        $minorType = $$mgrid{linetype} if (defined $$mgrid{linetype});
+        $major .= " linetype ".&_lineType($majorType);
+        $minor .= " linetype ".&_lineType($minorType);
+        
+        # Set the line width of the grid lines
+        my $majorWidth = my $minorWidth = 0;
         if (defined $$grid{width})
         {
-            my $majorWidth = my $minorWidth = $$grid{width};
+            $majorWidth = $minorWidth = $$grid{width};
             ($majorWidth, $minorWidth) = split(/\,\s?/, $$grid{width}) if
                 ($$grid{width} =~ /\,/);
-            $major .= " linewidth $majorWidth";
-            $minor .= " linewidth $minorWidth";
         }
+        $minorWidth = $$mgrid{width} if (defined $$mgrid{width});
+        $major .= " linewidth $majorWidth";
+        $minor .= " linewidth $minorWidth";
+
+        # Set the line color of the grid lines
         my $majorColor = my $minorColor = 'black';
         if (defined $$grid{color})
         {
@@ -669,16 +725,36 @@ sub _setGrid
             ($majorColor, $minorColor) = split(/\,\s?/, $$grid{color}) if
                 ($$grid{color} =~ /\,/);
         }
+        $minorColor = $$mgrid{color} if (defined $$mgrid{color});
         $major .= " linecolor rgb \"$majorColor\"";
         $minor .= " linecolor rgb \"$minorColor\"";
         $out .= "$major" if ($major ne '');
         $out .= ",$minor" if ($minor ne '');
     }
-    elsif ($grid ne 'on')
+    else
     {
-        return($grid);
+        if (defined $grid)
+        {
+            return($grid) if ($grid !~ /^(on|off)$/);
+            ($grid eq 'off')? ($out = " noxtics noytics"):
+                ($out = " xtics ytics");
+        }
+        $out .= " mxtics mytics" if (defined $mgrid && $mgrid eq 'on');
     }
     return($out);
+}
+
+
+# Convert grid string to hash
+# - called by _setGrid
+sub _gridString2Hash
+{
+    my ($grid) = @_;
+    return($grid) if (ref($grid) eq 'HASH');
+
+    my %out;
+    $out{xlines} = $out{ylines} = $out{zlines} = $grid;
+    return(\%out);
 }
 
 
@@ -868,10 +944,18 @@ sub _reset
 {
     my ($self) = @_;
     open(PLT, ">>$self->{_script}") || confess("Can't write $self->{_script}");
-    foreach my $opt (@{$self->{set}})
+    foreach my $opt (@{$self->{_sets}})
     {
         print PLT "unset $opt\n";
-        print PLT "set $opt\n";
+
+        if ($opt =~ /range$/)
+        {
+            print PLT "set $opt [*:*]\n";
+        }
+        elsif (!grep(/^$opt$/, qw(grid object parametric)) && $opt !~ /tics$/)
+        {
+            print PLT "set $opt\n";
+        }
     }
     close(PLT);
 }
@@ -1085,11 +1169,8 @@ use Chart::Gnuplot::Util qw(_lineType _pointType);
 sub new
 {
     my ($class, %hash) = @_;
-    my $baseTmp = '/tmp';
-    $baseTmp = $ENV{TMP} if (defined $ENV{TMP});
-    $baseTmp = $ENV{TEMP} if (defined $ENV{TEMP});
 
-    my $dirTmp = tempdir(CLEANUP => 1, DIR => $baseTmp);
+    my $dirTmp = tempdir(CLEANUP => 1);
     ($^O eq 'MSWin32')? ($dirTmp .= '\\'): ($dirTmp .= '/');
     $hash{_data} = $dirTmp . "data";
 
@@ -1114,7 +1195,6 @@ sub AUTOLOAD
 # - call _fillStyle()
 #
 # TODO:
-# - "using" feature for "file" dataset
 # - data file delimiter
 # - data labels
 # - zdata
@@ -1182,7 +1262,7 @@ sub _thaw
             {
                 my @a = split(/\s+/, $$xdata[0]);
                 my $yCol = scalar(@a) + 1;
-                $using = "1:$yCol";
+                $using = "1:".join(':', ($yCol .. $yCol+3));
             }
         }
         # Treatment for errorbars and errorlines styles
@@ -1372,15 +1452,13 @@ sub _thaw
         # Construst using statement for date-time data
         if (defined $self->{timefmt})
         {
-            my @a = split(/\s+/, $$pt[0][0]);
-            my $yCol = scalar(@a) + 1;
-            $using = "1:$yCol";
-
-            if (scalar(@{$$pt[0]}) == 3)
+            my $col = 1;
+            $using = "1";
+            for (my $i = 0; $i < @{$$pt[0]}-1; $i++)
             {
-                my @a = split(/\s+/, $$pt[0][1]);
-                my $zCol = scalar(@a) + $yCol;
-                $using .= ":$zCol";
+                my @a = split(/\s+/, $$pt[0][$i]);
+                $col += scalar(@a);
+                $using .= ":$col";
             }
         }
     }
@@ -1388,6 +1466,8 @@ sub _thaw
     elsif (defined $self->{datafile})
     {
         $string = "'$self->{datafile}'";
+        $string .= " every $self->{every}" if (defined $self->{every});
+        $string .= " index $self->{index}" if (defined $self->{index});
     }
     # Function
     elsif (defined $self->{func})
@@ -1395,11 +1475,6 @@ sub _thaw
         # Parametric function
         if (ref($self->{func}) eq 'HASH')
         {
-            open(PLT, ">>$chart->{_script}") ||
-                confess("Can't write $chart->{_script}");
-            print PLT "set parametric\n";
-            close(PLT);
-
             if (defined ${$self->{func}}{z})
             {
                 $string = "${$self->{func}}{x},${$self->{func}}{y},".
@@ -1507,10 +1582,10 @@ module, gnuplot need to be installed. If image format other than PS, PDF and
 EPS is required to generate, the convert program of ImageMagick is also needed.
 
 To plot chart using Chart::Gnuplot, a chart object and at least one dataset
-object are needed to be created. Information about the chart such as output
-file, chart title, axes labels and so on is specified in the chart object.
-Dataset object contains information about the dataset to be plotted, including
-source of the data points, dataset label, color used to plot and more.
+object are required. Information about the chart such as output file, chart
+title, axes labels and so on is specified in the chart object.  Dataset object
+contains information about the dataset to be plotted, including source of the
+data points, dataset label, color used to plot and more.
 
 After chart object and dataset object(s) are created, the chart can be plotted
 using the plot2d, plot3d or multiplot method of the chart object, e.g.
@@ -1518,7 +1593,8 @@ using the plot2d, plot3d or multiplot method of the chart object, e.g.
     # $chart is the chart object
     $chart->plot2d($dataSet1, $dataSet2, ...);
 
-To illustate the feature of Chart::Gnuplot, the best way is to show by examples.
+To illustate the features of Chart::Gnuplot, the best way is to show by
+examples. A lot of examples are provided in the package.
 
 =head1 CHART OBJECT
 
@@ -1564,7 +1640,7 @@ Properties of the chart title can be specified in hash. E.g.,
     title => {
         text => "Chart title",
         font => "arial, 20",
-        .....
+        ....
     }
 
 Supported properties are:
@@ -1578,81 +1654,70 @@ Supported properties are:
 Default values would be used for properties not specified. These properties has
 no effect on the main title of the multi-chart (see L<multiplot>).
 
-=head3 xlabel
+=head3 xlabel, ylabel, zlabel
 
-Label of the x-axis. E.g.
+Label of the x-axis, y-axis and z-axis. E.g.
 
     xlabel => "Bottom axis label"
 
-Properties of the chart title can be specified in hash, similar to the chart
+Properties of the axis label can be specified in hash, similar to the chart
 title. Supported properties are:
 
     text     : title in plain text
     font     : font face (and optionally font size)
     color    : font color
     offset   : offset relative to the default position
-    rotate   : rotation by degrees
+    rotate   : rotation in degrees
     enhanced : title contains subscript/superscipt/greek? (on/off)
 
-=head3 ylabel
+=head3 x2label, y2label
 
-Label of the y-axis. See L<xlabel>.
+Label of the secondary x-axis (displayed on the top of the graph) and the
+secondary y-axis (displayed on the right of the graph). See L<xlabel>.
 
-=head3 x2label
+=head3 xrange, yrange, zrange
 
-Label of the secondary x-axis (displayed on the top of the graph). See
-L<xlabel>.
+Range of the x-axis, y-axis and z-axis in the plot, e.g.
 
-=head3 y2label
+    xrange => [0, "pi"]
 
-Label of the secondary y-axis (displayed on the right of the graph). See
-L<xlabel>.
+=head3 x2range, y2range
 
-=head3 zlabel
+Range of the secondary axes in the plot. See L<xrange>.
 
-Label of the z-axis in 3D plots. See L<xlabel>.
-
-=head3 xrange
-
-Range of the x-axis in the plot, e.g.
-
-    xrange => [0, "pi"];
-
-=head3 yrange
-
-Range of the y-axis in the plot.
-
-=head3 x2range
-
-Range of the secondary x-axis in the plot.
-
-=head3 y2range
-
-Range of the secondary y-axis in the plot.
-
-=head3 zrange
-
-Range of the z-axis in the 3D plot.
-
-=head3 trange|urange|vrange
+=head3 trange, urange, vrange
 
 Range of the parametric parameter (t for 2D plots, while u and v for 3D plots).
+See L<xrange>.
 
-=head3 xtics
+=head3 xtics, ytics, ztics
 
-The tics and tic label of the x-axis.
+The tics and tic label on the x-axis, y-axis and z-axis. E.g.
 
-=head3 ytics
+   xtics => {
+      labels   => [-10, 15, 20, 25],
+      labelfmt => "%3f",
+      ....
+   }
 
-The tics and tic label of the y-axis.
+Supported properties are:
 
-=head3 x2tics
+    labels    : the locations of the tic labels
+    labelfmt  : format of the labels
+    font      : font of the labels
+    fontsize  : font size of the lebals
+    fontcolor : font color of the label
+    offset    : position of the tic labels shifted from its default
+    rotate    : rotation of the tic labels
+    length    : length of the tics
+    along     : where the tics are put (axis/border)
+    minor     : number of minor tics between adjacant major tics
+    mirror    : turn on and off the tic label of the secondary axis. No effect
+              : for C<ztics> (on/off)
 
-The tics and tic label of the x2-axis.
+=head3 x2tics, y2tics
 
-=head3 y2tics
-
-The tics and tic label of the y2-axis.
+The tics and tic label of the secondary axes. See L<xtics, ytics, ztics>.
 
 =head3 legend
 
@@ -1667,7 +1732,9 @@ Legend describing the plots. Supported properties are:
     order    : order of the keys
     title    : title of the legend
     sample   : format of the sample lines
-    border   : border of the legend. See L<border> for available options
+    border   : border of the legend
+    
+See L<border> for the available options of border
 
 E.g.
 
@@ -1712,40 +1779,60 @@ E.g.
 
 =head3 grid
 
-Grid lines.
+Major grid lines. E.g.
 
-=head3 bmargin
+    grid => {
+        type  => 'dash',
+        width => 2,
+        ....
+    }
 
-Bottom margin (in character height). This option has no effect in 3D plots.
+Supported properties are:
 
-=head3 lmargin
+    type   : line type of the grid lines (default: dot)
+    width  : line width (defaulr: 0)
+    color  : line color (default: black)
+    xlines : whether the vertical grid lines are drawn (on/off)
+    ylines : whether the horizontal grid lines are drawn (on/off)
 
-Left margin (in character width)
+=head3 tmargin, bmargin
 
-=head3 rmargin
+Top and bottom margin (in character height). This option has no effect in 3D
+plots. E.g.
 
-Right margin (in character width). This option has no effect in 3D plots.
+    tmargin => 10
 
-=head3 tmargin
+=head3 lmargin, rmargin
 
-Top margin (in character height). This option has no effect in 3D plots.
+Left amd right margin (in character width). This option has no effect in 3D
+plots. See L<tmargin, bmargin>.
 
 =head3 orient
 
-Orientation of the image. Possible values are "lanscape" and "portrait".
+Orientation of the image. Possible values are "lanscape" (default) and
+"portrait". E.g.
+
+    orient => "portrait"
 
 =head3 imagesize
 
-Size (length and height) of the image relative to the default.
+Size (length and height) of the image relative to the default. E.g.
+
+    imagesize => "0.8, 0.5"
 
 =head3 size
 
 Size of the chart relative to the chart size. This is useful in some
-multi-plot such as inset chart.
+multi-plot such as inset chart. E.g.
+
+    size => "0.5, 0.4"
 
 =head3 origin
 
 Origin of the chart. This is useful in some multi-plot such as inset chart.
+E.g.
+
+    origin => "0.1, 0.5"
 
 =head3 timestamp
 
@@ -1763,17 +1850,34 @@ To set the format of the time stamp as well, e.g.,
 
 =head3 bg (experimental)
 
-Background color of the chart. This option is experimental.
+Background color of the chart. This option has no effect in the sub-chart of
+multiplot and is experimental. E.g.
+
+    bg => "yellow"
+
+Properties can be specified in hash. E.g.,
+
+    bg => {
+        color   => "yellow",
+        density => 0.2,
+    }
+
+Supported properties are:
+
+    color   : color (name ot RRGGBB value)
+    density : density of the coloring
 
 =head3 plotbg (experimental)
 
 Background color of the plot area. This option has no effect in 3D plots and is
-experimental.
+experimental. See L<bg>.
 
 =head3 gnuplot
 
-The path of Gnuplot installed. This option is useful if you have multiple
-versions of Gnuplot installed.
+The path of Gnuplot executable. This option is useful if you are using Windows
+or have multiple versions of Gnuplot installed. E.g.,
+
+    gnuplot => "C:\Program Files\...\gnuplot\bin\wgnuplot.exe";   # for Windows
 
 =head3 convert
 
@@ -1920,22 +2024,14 @@ coordinates
 
 =head2 Dataset Options
 
-=head3 xdata
+=head3 xdata, ydata, zdata
 
-The x values of the data points.
+The x, y, z values of the data points. E.g.
 
     xdata => \@x
 
 If C<xdata> is omitted but C<ydata> is defined, the integer index starting from
 0 would be used for C<xdata>.
-
-=head3 ydata
-
-The y values of the data points. See L<xdata>.
-
-=head3 zdata
-
-The z values of the data points. See L<xdata>
 
 =head3 points
 
