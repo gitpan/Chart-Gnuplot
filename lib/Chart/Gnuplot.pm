@@ -5,7 +5,7 @@ use Carp;
 use File::Copy;
 use File::Temp qw(tempdir);
 use Chart::Gnuplot::Util qw(_lineType _pointType);
-$VERSION = '0.10';
+$VERSION = '0.11';
 
 # Constructor
 sub new
@@ -1354,6 +1354,42 @@ sub _thaw
                 $using = "1:$yCol";
             }
         }
+        # Treatment for hbars
+        # - use "boxxyerrorbars" style to mimic
+        elsif (defined $self->{xdata} && defined $self->{style} &&
+            $self->{style} eq 'hbars')
+        {
+            my $xdata = $self->{xdata};
+            my $ylow = my $yhigh = $$ydata[0];
+            if (scalar(@$ydata) > 1)
+            {
+                $ylow = 0.5*(3*$$ydata[0]-$$ydata[1]);
+                $yhigh = 0.5*(3*$$ydata[-1]-$$ydata[-2]);
+            }
+
+            for (my $i = 0; $i < @$xdata; $i++)
+            {
+                $ylow = 0.5*($$ydata[$i]+$$ydata[$i-1]) if ($i > 0);
+                $yhigh = 0.5*($$ydata[$i]+$$ydata[$i+1]) if ($i < $#$ydata);
+                print DATA "0 $$ydata[$i] 0 $$xdata[$i] $ylow $yhigh\n";
+            }
+            $self->{style} = "boxxyerrorbars";
+            $string = "'$fileTmp'";
+        }
+        # Treatment for hlines
+        # - use "boxxyerrorbars" style to mimic
+        elsif (defined $self->{xdata} && defined $self->{style} &&
+            $self->{style} eq 'hlines')
+        {
+            my $xdata = $self->{xdata};
+            for (my $i = 0; $i < @$xdata; $i++)
+            {
+                print DATA "0 $$ydata[$i] 0 $$xdata[$i] $$ydata[$i] ".
+                    "$$ydata[$i]\n";
+            }
+            $self->{style} = "boxxyerrorbars";
+            $string = "'$fileTmp'";
+        }
         # Normal x-y plot
         # - Both xdata and ydata are defined
         elsif (defined $self->{xdata})
@@ -1430,9 +1466,40 @@ sub _thaw
         if (scalar(@{$$pt[0]}) == 2 ||
             (defined $self->{style} && $self->{style} =~ /error/))
         {
-            for(my $i = 0; $i < @$pt; $i++)
+            # hlines plotting style
+            if (defined $self->{style} && $self->{style} eq 'hlines')
             {
-                print DATA join(" ", @{$$pt[$i]}), "\n";
+                for(my $i = 0; $i < @$pt; $i++)
+                {
+                    print DATA "0 $$pt[$i][1] 0 $$pt[$i][0] $$pt[$i][1] ".
+                        "$$pt[$i][1]\n";
+                }
+                $self->{style} = "boxxyerrorbars";
+            }
+            # hbars plotting style
+            elsif (defined $self->{style} && $self->{style} eq 'hbars')
+            {
+                my $ylow = my $yhigh = $$pt[0][1];
+                if (scalar(@$pt) > 1)
+                {
+                    $ylow = 0.5*(3*$$pt[0][1]-$$pt[1][1]);
+                    $yhigh = 0.5*(3*$$pt[-1][1]-$$pt[-2][1]);
+                }
+
+                for(my $i = 0; $i < @$pt; $i++)
+                {
+                    $ylow = 0.5*($$pt[$i][1]+$$pt[$i-1][1]) if ($i > 0);
+                    $yhigh = 0.5*($$pt[$i][1]+$$pt[$i+1][1]) if ($i < $#$pt);
+                    print DATA "0 $$pt[$i][1] 0 $$pt[$i][0] $ylow $yhigh\n";
+                }
+                $self->{style} = "boxxyerrorbars";
+            }
+            else
+            {
+                for(my $i = 0; $i < @$pt; $i++)
+                {
+                    print DATA join(" ", @{$$pt[$i]}), "\n";
+                }
             }
         }
         # 3D data points
@@ -1490,6 +1557,10 @@ sub _thaw
             $string = "$self->{func}";
         }
     }
+	else
+	{
+		croak("Unknown or undefined data source");
+	}
 
     # Process the Gnuplot "using" feature
     $using = $self->{using} if (defined $self->{using});
@@ -2159,6 +2230,8 @@ The plotting style for the dataset, including
     boxxyerrorbars : use rectangles to represent the data with errors
     financebars    : finance bars for open, high, low and close price
     candlesticks   : candle sticks for open, high, low and close price
+    hbars          : horizontal bars (experimental)
+    hlines         : horizontal lines (experimental)
 
 =head3 color
 
@@ -2395,7 +2468,7 @@ ImageMagick L<http://www.imagemagick.org> (for full feature)
 
 =head1 TEST ENVIRONMENT
 
-This version is tested against Gnuplot 4.2.0 to 4.2.3 in Linux.
+This version is tested against Gnuplot 4.2.0 to 4.2.4 in Linux.
 
 =head1 SEE ALSO
 

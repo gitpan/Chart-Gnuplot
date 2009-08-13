@@ -2,34 +2,29 @@
 use strict;
 use Chart::Gnuplot;
 
+# Demonstration of the horizontal bar style
+
 # Initiate the chart object
 my $chart = Chart::Gnuplot->new(
     output => 'gallery/plotStyle_13.png',
 );
 
 # Raw data
-my @x = (1, 2, 3, 4, 5, 6);
-my @y = (2, 8, 3, 2, 4, 0);
+# - Gaussian distribution
+my (@x, @y) = ();
+for (my $x = 0; $x < 5; $x += 0.1)
+{
+    my $y = exp(-$x*$x/2);
+    push(@x, $x);
+    push(@y, $y);
+}
 
-my $points = Chart::Gnuplot::DataSet->new(
-    xdata => \@x,
-    ydata => \@y,
-    style => 'linespoints',
-);
-my $csplines = Chart::Gnuplot::DataSet->new(
-    xdata  => \@x,
-    ydata  => \@y,
-    style  => 'lines',
-    smooth => 'csplines',
-    title  => 'Smoothed by cubic splines',
-);
-my $bezier = Chart::Gnuplot::DataSet->new(
-    xdata  => \@x,
-    ydata  => \@y,
-    style  => 'lines',
-    smooth => 'bezier',
-    title  => 'Smoothed by a Bezier curve',
+# Data set object
+my $hbars = Chart::Gnuplot::DataSet->new(
+	xdata => \@x,
+	ydata => \@y,
+	style => "hbars",
 );
 
 # Plot the graph
-$chart->plot2d($points, $csplines, $bezier);
+$chart->plot2d($hbars);

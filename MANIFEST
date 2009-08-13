@@ -88,6 +88,8 @@ examples/plotStyle_10.pl
 examples/plotStyle_11.pl
 examples/plotStyle_12.pl
 examples/plotStyle_13.pl
+examples/plotStyle_14.pl
+examples/plotStyle_15.pl
 examples/range_1.pl
 examples/range_2.pl
 examples/range_3.pl
@@ -105,6 +107,8 @@ examples/ticFmt_11.pl
 examples/ticFmt_12.pl
 examples/ticFmt_13.pl
 examples/index.html
+examples/list.html
+examples/main.html
 examples/dataSrc_3.dat
 examples/plot3d_3.dat
 t/axisLabel.t

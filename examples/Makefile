@@ -82,6 +82,8 @@ plotStyle_10.png \
 plotStyle_11.png \
 plotStyle_12.png \
 plotStyle_13.png \
+plotStyle_14.png \
+plotStyle_15.png \
 range_1.png \
 range_2.png \
 range_3.png \
