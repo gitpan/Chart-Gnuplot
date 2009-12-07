@@ -7,6 +7,7 @@ use Chart::Gnuplot;
 # Initiate the chart object
 my $chart = Chart::Gnuplot->new(
     output => 'gallery/plotStyle_13.png',
+    title  => 'horizontal bars'
 );
 
 # Raw data

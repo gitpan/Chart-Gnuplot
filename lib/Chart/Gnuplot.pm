@@ -5,7 +5,7 @@ use Carp;
 use File::Copy;
 use File::Temp qw(tempdir);
 use Chart::Gnuplot::Util qw(_lineType _pointType);
-$VERSION = '0.11';
+$VERSION = '0.12';
 
 # Constructor
 sub new
@@ -922,7 +922,14 @@ sub _execute
     # Execute gnuplot
     my $gnuplot = 'gnuplot';
     $gnuplot = $self->{gnuplot} if (defined $self->{gnuplot});
-    system("$gnuplot $self->{_script}");
+    my $err = `$gnuplot $self->{_script} 2>&1`;
+
+    # Capture and process error message from Gnuplot
+    if (defined $err && $err ne '')
+    {
+        my ($errTmp) = ($err =~ /\", line \d+:\s(.+)/);
+        die "$errTmp\n" if (defined $errTmp);
+    }
 
     # Convert the image to the user-specified format
     if (defined $self->{output} && $self->{output} =~ /\./)
@@ -1077,7 +1084,16 @@ sub convert
         }
         else
         {
-            system("$convert -rotate 90 $temp $temp".".$imgfmt");
+            my $cmd = "$convert -rotate 90 $temp $temp".".$imgfmt 2>&1";
+            my $err = `$cmd`;
+            if (defined $err && $err ne '')
+            {
+                die "Unsupported image format ($imgfmt)\n" if
+                    ($err =~ /^convert: unable to open module file/);
+
+                my ($errTmp) = ($err =~ /^convert: (.+)/);
+                die "$errTmp Perhaps the image format is not supported\n";
+            }
         }
     }
 
@@ -2389,7 +2405,19 @@ y-axis.
 
     $chart->plot2d($sine, $cosine, $tangent);
 
-=item 6. Plot a financial time series
+=item 6. Title in non-English characters (Thanks to WOLfgang Schricker)
+
+    use Encode;
+
+    my $title = ...   # Title with German umlauts
+    $title = decode("utf8", $title);
+
+    Chart::Gnuplot->new(
+        encoding => 'iso-8859-1',
+        title    => $title,
+    );
+
+=item 7. Plot a financial time series
 
     my $chart = Chart::Gnuplot->new(
         output   => "dj.ps",
@@ -2409,7 +2437,7 @@ y-axis.
 
     $chart->plot2d($dow);
 
-=item 7. Plot several graphs on the same image
+=item 8. Plot several graphs on the same image
 
     my $chart = Chart::Gnuplot->new(
         output => "multiplot.gif",

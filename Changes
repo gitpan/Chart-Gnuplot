@@ -1,5 +1,10 @@
 Change log for Chart::Gnuplot
 
+0.12
+    - More understandable error messages
+    - Add an example in POD
+      (Thanks to WOLfgang Schricker)
+
 0.11
     - Add new plotting styles "hbars" (horizontal bars) and "hlines"
       (horizontal lines)
