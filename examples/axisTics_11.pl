@@ -3,10 +3,10 @@ use strict;
 use Chart::Gnuplot;
 
 my $chart = Chart::Gnuplot->new(
-    output => "gallery/ticFmt_3.png",
-    xlabel => "Re-label the tics",
+    output => "gallery/axisTics_11.png",
+    xlabel => "No tics on the x2-axis",
     xtics  => {
-        labels => ['"pi" 3.1416', '"-pi" -3.1416'],
+        mirror => 'off',
     },
 );
 

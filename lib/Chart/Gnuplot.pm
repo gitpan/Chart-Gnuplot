@@ -2,10 +2,10 @@ package Chart::Gnuplot;
 use strict;
 use vars qw($VERSION);
 use Carp;
-use File::Copy;
+use File::Copy qw(move);
 use File::Temp qw(tempdir);
-use Chart::Gnuplot::Util qw(_lineType _pointType);
-$VERSION = '0.12';
+use Chart::Gnuplot::Util qw(_lineType _pointType _copy);
+$VERSION = '0.13';
 
 # Constructor
 sub new
@@ -922,13 +922,16 @@ sub _execute
     # Execute gnuplot
     my $gnuplot = 'gnuplot';
     $gnuplot = $self->{gnuplot} if (defined $self->{gnuplot});
-    my $err = `$gnuplot $self->{_script} 2>&1`;
+    my $cmd = "$gnuplot $self->{_script}";
+    $cmd .= " -" if ($self->{terminal} =~ /^(ggi|pm|windows|wxt|x11)(\s|$)/);
+    my $err = `$cmd 2>&1`;
 
     # Capture and process error message from Gnuplot
     if (defined $err && $err ne '')
     {
         my ($errTmp) = ($err =~ /\", line \d+:\s(.+)/);
         die "$errTmp\n" if (defined $errTmp);
+        warn "$err\n";
     }
 
     # Convert the image to the user-specified format
@@ -1041,11 +1044,6 @@ sub test
 }
 
 
-sub histogram
-{
-}
-
-
 # Change the image format
 # - called by plot2d()
 #
@@ -1080,7 +1078,18 @@ sub convert
         # Rotate 90 deg for landscape image
         if (defined $self->{orient} && $self->{orient} eq 'portrait')
         {
-            system("$convert $temp $temp".".$imgfmt");
+            my $cmd = "$convert $temp $temp".".$imgfmt 2>&1";
+            my $err = `$cmd`;
+            if (defined $err && $err ne '')
+            {
+                die "Unsupported image format ($imgfmt)\n" if
+                    ($err =~ /^convert: unable to open module file/);
+
+                my ($errTmp) = ($err =~ /^convert: (.+)/);
+                die "$errTmp Perhaps the image format is not supported\n" if
+                    (defined $errTmp);
+                die "$err\n";
+            }
         }
         else
         {
@@ -1092,7 +1101,9 @@ sub convert
                     ($err =~ /^convert: unable to open module file/);
 
                 my ($errTmp) = ($err =~ /^convert: (.+)/);
-                die "$errTmp Perhaps the image format is not supported\n";
+                die "$errTmp Perhaps the image format is not supported\n" if
+                    (defined $errTmp);
+                die "$err\n";
             }
         }
     }
@@ -1173,13 +1184,30 @@ sub pdf
     return($self)
 }
 
+
+# Copy method of the chart object
+sub copy
+{
+    my ($self, $num) = @_;
+    my @clone = &_copy(@_);
+
+    foreach my $clone (@clone)
+    {
+        my $dirTmp = tempdir(CLEANUP => 1);
+        ($^O eq 'MSWin32')? ($dirTmp .= '\\'): ($dirTmp .= '/');
+        $clone->{_script} = $dirTmp . "plot";
+    }
+    return($clone[0]) if (!defined $num);
+    return(@clone);
+}
+
 ################## Chart::Gnuplot::DataSet class ##################
 
 package Chart::Gnuplot::DataSet;
 use strict;
 use Carp;
 use File::Temp qw(tempdir);
-use Chart::Gnuplot::Util qw(_lineType _pointType);
+use Chart::Gnuplot::Util qw(_lineType _pointType _copy);
 
 # Constructor
 sub new
@@ -1205,6 +1233,91 @@ sub AUTOLOAD
     $self->{$attr} = $key if (defined $key);
     return($self->{$attr});
 }
+
+
+# xdata get-set method
+sub xdata
+{
+    my ($self, $xdata) = @_;
+    return($self->{xdata}) if (!defined $xdata);
+
+    delete $self->{points};
+    delete $self->{datafile};
+    delete $self->{func};
+    $self->{xdata} = $xdata;
+}
+
+
+# ydata get-set method
+sub ydata
+{
+    my ($self, $ydata) = @_;
+    return($self->{ydata}) if (!defined $ydata);
+
+    delete $self->{points};
+    delete $self->{datafile};
+    delete $self->{func};
+    $self->{ydata} = $ydata;
+}
+
+
+# zdata get-set method
+sub zdata
+{
+    my ($self, $zdata) = @_;
+    return($self->{zdata}) if (!defined $zdata);
+
+    delete $self->{points};
+    delete $self->{datafile};
+    delete $self->{func};
+    $self->{zdata} = $zdata;
+}
+
+
+# points get-set method
+sub points
+{
+    my ($self, $points) = @_;
+    return($self->{points}) if (!defined $points);
+
+    delete $self->{xdata};
+    delete $self->{ydata};
+    delete $self->{zdata};
+    delete $self->{datafile};
+    delete $self->{func};
+    $self->{points} = $points;
+}
+
+
+# datafile get-set method
+sub datafile
+{
+    my ($self, $datafile) = @_;
+    return($self->{datafile}) if (!defined $datafile);
+
+    delete $self->{xdata};
+    delete $self->{ydata};
+    delete $self->{zdata};
+    delete $self->{points};
+    delete $self->{func};
+    $self->{datafile} = $datafile;
+}
+
+
+# func get-set method
+sub func
+{
+    my ($self, $func) = @_;
+    return($self->{func}) if (!defined $func);
+
+    delete $self->{xdata};
+    delete $self->{ydata};
+    delete $self->{zdata};
+    delete $self->{points};
+    delete $self->{datafile};
+    $self->{func} = $func;
+}
+
 
 
 # Thaw the data set object to string
@@ -1617,6 +1730,23 @@ sub _fillStyle
     }
 
     return(" solid $fill");
+}
+
+
+# Copy method of the data set object
+sub copy
+{
+    my ($self, $num) = @_;
+    my @clone = &_copy(@_);
+
+    foreach my $clone (@clone)
+    {
+        my $dirTmp = tempdir(CLEANUP => 1);
+        ($^O eq 'MSWin32')? ($dirTmp .= '\\'): ($dirTmp .= '/');
+        $clone->{_data} = $dirTmp . "data";
+    }
+    return($clone[0]) if (!defined $num);
+    return(@clone);
 }
 
 
@@ -2041,6 +2171,22 @@ Add an arbitrary text label. e.g.,
         pointcolor => "blue",
     );
 
+=head3 copy
+
+Copy the chart object. This method is especially useful when you want to copy a
+chart with highly customized format. E.g.
+
+    my $chart = Chart::Gnuplot->new(
+        ...
+    );
+
+    # $copy and $chart will have the same format
+    my $copy = $chart->copy;
+
+You may also make multiple copies . E.g.
+
+    my @copies = $chart->copy(10);  # make 10 copies
+
 =head3 convert
 
     $chart->convert($imageFmt);
@@ -2315,6 +2461,22 @@ for details.
 Constructor of the dataset object. If no option is specified, default values
 would be used. See L<Dataset Options> for available options.
 
+=head3 copy
+
+Copy the dataset object. This method is especially useful when you want to copy
+a dataset with highly customized format. E.g.
+
+    my $dataset = Chart::Gnuplot::DataSet->new(
+        ...
+    );
+
+    # $copy and $dataset will have the same format and contain the same data
+    my $copy = $dataset->copy;
+
+You may also make multiple copies . E.g.
+
+    my @copies = $dataset->copy(10);  # make 10 copies
+
 =head1 EXAMPLES
 
 Some simple examples are shown below. Many more come with the distribution.
@@ -2478,17 +2640,15 @@ y-axis.
 
 =item 3. Add curve fitting method.
 
-=item 4. Add method to copy Chart and DataSet objects.
+=item 4. Improve the testsuite.
 
-=item 5. Improve the testsuite.
-
-=item 6. Reduce number of temporary files generated.
+=item 5. Reduce number of temporary files generated.
 
 =back
 
 =head1 REQUIREMENTS
 
-L<File::Copy>, L<File::Temp>
+L<File::Copy>, L<File::Temp>, L<Storable>
 
 Gnuplot L<http://www.gnuplot.info>
 
@@ -2508,7 +2668,7 @@ Ka-Wai Mak <kwmak@cpan.org>
 
 =head1 COPYRIGHT
 
-Copyright (c) 2008-2009 Ka-Wai Mak. All rights reserved.
+Copyright (c) 2008-2010 Ka-Wai Mak. All rights reserved.
 
 =head1 LICENSE
 

@@ -5,7 +5,11 @@ WriteMakefile(
 	NAME          => 'Chart::Gnuplot',
 	VERSION_FROM  => 'lib/Chart/Gnuplot.pm',
 	ABSTRACT_FROM => "lib/Chart/Gnuplot.pm",
-	PREREQ_PM     => { File::Copy => 2.08, File::Temp => 0.14 },
+	PREREQ_PM     => {
+        File::Copy => 2.08,
+        File::Temp => 0.14,
+        Storable   => 2.15,
+    },
 	dist          => {
 		SUFFIX   => '.gz',
 		COMPRESS => 'gzip -f'

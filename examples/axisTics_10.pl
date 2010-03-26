@@ -3,11 +3,11 @@ use strict;
 use Chart::Gnuplot;
 
 my $chart = Chart::Gnuplot->new(
-    output => "gallery/bg_2.png",
-    title  => "Filling background color in the plot area",
-    plotbg     => {
-        color   => "#c9c9ff",
-        density => 0.2,
+    output => "gallery/axisTics_10.png",
+    xlabel => "Longer tics",
+    xtics  => {
+        length => "5, 3",
+        minor  => 4,
     },
 );
 

@@ -4,22 +4,21 @@ use Test::More (tests => 4);
 
 BEGIN {use Chart::Gnuplot;}
 
-my $temp = "temp.ps";
 
 # Test plotting from Perl arrays of x coordinates and y coordinates
 {
     my @x = (-10 .. 10);
     my @y = (0 .. 20);
 
-    my $c = Chart::Gnuplot->new(
-        output => $temp,
-    );
     my $d = Chart::Gnuplot::DataSet->new(
         xdata => \@x,
         ydata => \@y,
     );
-    ok(ref($c) eq 'Chart::Gnuplot' && ref($d) eq 'Chart::Gnuplot::DataSet');
+
+    $d->_thaw();
+    ok(&diff($d->{_data}, "dataSrc_1.dat") == 0);
 }
+
 
 # Test plotting from Perl array of x-y pairs
 {
@@ -32,36 +31,55 @@ my $temp = "temp.ps";
         [9, 3],
     );
 
-    my $c = Chart::Gnuplot->new(
-        output => $temp,
-    );
     my $d = Chart::Gnuplot::DataSet->new(
         points => \@xy,
     );
-    ok(ref($c) eq 'Chart::Gnuplot' && ref($d) eq 'Chart::Gnuplot::DataSet');
+
+    $d->_thaw();
+    ok(&diff($d->{_data}, "dataSrc_2.dat") == 0);
 }
+
 
 # Test plotting from data file
 {
-    my $infile = "t/data.dat";
-    $infile = "data.dat" if (!-e "t/data.dat");
+    my $infile = "dataSrc_3.dat";
+    $infile = "t/".$infile if (!-e $infile);
 
-    my $c = Chart::Gnuplot->new(
-        output => $temp,
-    );
     my $d = Chart::Gnuplot::DataSet->new(
         datafile => $infile,
     );
-    ok(ref($c) eq 'Chart::Gnuplot' && ref($d) eq 'Chart::Gnuplot::DataSet');
+
+    my $string = $d->_thaw();
+    ok($string eq "'$infile' title \"\"");
 }
+
 
 # Test plotting from mathematical expression
 {
-    my $c = Chart::Gnuplot->new(
-        output => $temp,
-    );
     my $d = Chart::Gnuplot::DataSet->new(
         func => "sin(x)",
     );
-    ok(ref($c) eq 'Chart::Gnuplot' && ref($d) eq 'Chart::Gnuplot::DataSet');
+
+    my $string = $d->_thaw();
+    ok($string eq "sin(x) title \"\"");
+}
+
+###################################################################
+
+# Compare two files
+# - return 0 if two files are the same, except the ordering of the lines
+# - return 1 otherwise
+sub diff
+{
+    my ($f1, $f2) = @_;
+    $f2 = "t/".$f2 if (!-e $f2);
+
+    open(F1, $f1) || return(1);
+    open(F2, $f2) || return(1);
+    my @c1 = <F1>;
+    my @c2 = <F2>;
+    close(F1);
+    close(F2);
+    return(0) if (join("", sort @c1) eq join("", sort @c2));
+    return(1);
 }

@@ -3,10 +3,10 @@ use strict;
 use Chart::Gnuplot;
 
 my $chart = Chart::Gnuplot->new(
-    output => "gallery/ticFmt_11.png",
-    xlabel => "No tics on the x2-axis",
+    output => "gallery/axisTics_4.png",
+    xlabel => "Number format with 2 decimal places",
     xtics  => {
-        mirror => 'off',
+        labelfmt => '%.2f',
     },
 );
 

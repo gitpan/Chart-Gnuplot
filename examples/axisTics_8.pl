@@ -3,10 +3,10 @@ use strict;
 use Chart::Gnuplot;
 
 my $chart = Chart::Gnuplot->new(
-    output => "gallery/ticFmt_7.png",
-    xlabel => "Red tic label",
+    output => "gallery/axisTics_8.png",
+    xlabel => "Shifted tic label",
     xtics  => {
-        fontcolor => "red",
+        offset => "8, -1"
     },
 );
 

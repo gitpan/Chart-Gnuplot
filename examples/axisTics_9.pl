@@ -3,10 +3,10 @@ use strict;
 use Chart::Gnuplot;
 
 my $chart = Chart::Gnuplot->new(
-    output => "gallery/ticFmt_5.png",
-    xlabel => "Tic labels in times-italic",
-    xtics  => {
-        font => "Times-Italic",
+    output => "gallery/axisTics_9.png",
+    ylabel => "Rotated tic label by 45 deg",
+    ytics  => {
+        rotate => '45',
     },
 );
 

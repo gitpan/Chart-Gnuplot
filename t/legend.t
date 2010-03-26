@@ -6,33 +6,35 @@ BEGIN {use Chart::Gnuplot;}
 
 my $temp = "temp.ps";
 
-# Test default setting of chart title
+# Test default setting of legend
 {
-    my $c = Chart::Gnuplot->new(
-        output => $temp,
-        title  => "My chart title",
+    my $d = Chart::Gnuplot::DataSet->new(
+        func  => "cos(x)",
+        title => "cosine function",
     );
 
-    $c->_setChart();
-    ok(&diff($c->{_script}, "chartTitle_1.gp") == 0);
+    ok($d->_thaw() eq "cos(x) title \"cosine function\"");
 }
 
 
-# Test formatting the chart title
+# Test formatting the legend
 {
     my $c = Chart::Gnuplot->new(
         output => $temp,
-        title  => {
-            text     => "My chart title in {/Symbol-Oblique greek}",
-            font     => "Courier, 30",
-            color    => "pink",
-            offset   => "3,2",
-            enhanced => "on",
+        legend => {
+            position => "outside center bottom",
+            order    => "horizontal reverse",
+            align    => 'left',
+            width    => 3,
+            height   => 4,
+            title    => 'Trigonometric functions',
+            sample   => {length => 10, position => 'left', spacing => 2},
+            border   => 'on',
         },
     );
 
     $c->_setChart();
-    ok(&diff($c->{_script}, "chartTitle_2.gp") == 0);
+    ok(&diff($c->{_script}, "legend_1.gp") == 0);
 }
 
 ###################################################################

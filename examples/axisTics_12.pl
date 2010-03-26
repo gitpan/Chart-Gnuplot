@@ -3,7 +3,7 @@ use strict;
 use Chart::Gnuplot;
 
 my $chart = Chart::Gnuplot->new(
-    output => "gallery/ticFmt_12.png",
+    output => "gallery/axisTics_12.png",
     title => "Turn on the tics on the y2-axis",
     y2tics => "on",
 );

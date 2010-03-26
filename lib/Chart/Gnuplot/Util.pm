@@ -4,7 +4,7 @@ use vars qw(@ISA @EXPORT_OK);
 use Exporter;
 
 @ISA = qw(Exporter);
-@EXPORT_OK = qw(_lineType _pointType);
+@EXPORT_OK = qw(_lineType _pointType _copy);
 
 # Convert named line type to indexed line type of gnuplot
 #
@@ -71,6 +71,24 @@ sub _pointType
 	);
 	return($type{$type});
 }
+
+
+# Copy object using dclone() of Storable
+sub _copy
+{
+    my ($obj, $num) = @_;
+    use Storable;
+
+    my @clones = ();
+    $num = 1 if (!defined $num);
+
+    for (my $i = 0; $i < $num; $i++)
+    {
+        push(@clones, Storable::dclone($obj));
+    }
+    return(@clones);
+}
+
 
 1;
 

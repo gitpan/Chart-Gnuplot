@@ -7,8 +7,21 @@ axisLabel_5.png \
 axisLabel_6.png \
 axisLabel_7.png \
 axisLabel_8.png \
-bg_1.png \
-bg_2.png \
+axisTics_1.png \
+axisTics_2.png \
+axisTics_3.png \
+axisTics_4.png \
+axisTics_5.png \
+axisTics_6.png \
+axisTics_7.png \
+axisTics_8.png \
+axisTics_9.png \
+axisTics_10.png \
+axisTics_11.png \
+axisTics_12.png \
+axisTics_13.png \
+background_1.png \
+background_2.png \
 border_1.png \
 border_2.png \
 border_3.png \
@@ -87,19 +100,6 @@ plotStyle_15.png \
 range_1.png \
 range_2.png \
 range_3.png \
-ticFmt_1.png \
-ticFmt_2.png \
-ticFmt_3.png \
-ticFmt_4.png \
-ticFmt_5.png \
-ticFmt_6.png \
-ticFmt_7.png \
-ticFmt_8.png \
-ticFmt_9.png \
-ticFmt_10.png \
-ticFmt_11.png \
-ticFmt_12.png \
-ticFmt_13.png \
 
 all: mkdir $(IMAGES)
 

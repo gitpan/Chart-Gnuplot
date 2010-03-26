@@ -1,38 +1,34 @@
 #!/usr/bin/perl -w
 use strict;
-use Test::More (tests => 2);
+use Test::More (tests => 1);
 
 BEGIN {use Chart::Gnuplot;}
 
 my $temp = "temp.ps";
 
-# Test default setting of chart title
+# Test formatting the legend
 {
     my $c = Chart::Gnuplot->new(
         output => $temp,
-        title  => "My chart title",
-    );
-
-    $c->_setChart();
-    ok(&diff($c->{_script}, "chartTitle_1.gp") == 0);
-}
-
-
-# Test formatting the chart title
-{
-    my $c = Chart::Gnuplot->new(
-        output => $temp,
-        title  => {
-            text     => "My chart title in {/Symbol-Oblique greek}",
-            font     => "Courier, 30",
-            color    => "pink",
-            offset   => "3,2",
-            enhanced => "on",
+        xtics  => {
+            labelfmt  => '%.1g',
+            font      => 'arial,18',
+            fontcolor => 'magenta',
+        },
+        ytics  => {
+            labels => [-0.8, 0.3, 0.6], # specify tic labels
+            rotate => '30',
+            mirror => 'off',            # no tic on y2 axis
+        },
+        x2tics => [-8, -6, -2, 2, 5, 9],
+        y2tics => {
+            length => "4,2",            # tic size
+            minor  => 4,                # 2 minor tics between major tics
         },
     );
 
     $c->_setChart();
-    ok(&diff($c->{_script}, "chartTitle_2.gp") == 0);
+    ok(&diff($c->{_script}, "axisTics_1.gp") == 0);
 }
 
 ###################################################################

@@ -3,10 +3,11 @@ use strict;
 use Chart::Gnuplot;
 
 my $chart = Chart::Gnuplot->new(
-    output => "gallery/ticFmt_4.png",
-    xlabel => "Number format with 2 decimal places",
-    xtics  => {
-        labelfmt => '%.2f',
+    output => "gallery/background_1.png",
+    title  => "Filling background color in the chart",
+    bg     => {
+        color   => "#c9c9ff",
+        density => 0.2,
     },
 );
 

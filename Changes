@@ -1,5 +1,16 @@
 Change log for Chart::Gnuplot
 
+0.13
+    - Improve error handling
+    - Add method to copy the chart and data set objects
+    - Add specific get-set methods for xdata, ydata, zdata, points, datafile
+      and func so that different data sources cannot co-exist in the same data
+      set object
+    - Keep the plot window from disappearing immediately for interactive
+      terminals
+      (Thanks to Alex White)
+    - More strict testsuite. Add more test cases
+
 0.12
     - More understandable error messages
     - Add an example in POD

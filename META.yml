@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Chart-Gnuplot
-version:            0.12
+version:            0.13
 abstract:           Plot graph using Gnuplot on the fly
 author:
     - Ka-Wai Mak
@@ -13,6 +13,7 @@ build_requires:
 requires:
     File::Copy:  2.08
     File::Temp:  0.14
+    Storable:    2.15
 no_index:
     directory:
         - t

@@ -3,10 +3,11 @@ use strict;
 use Chart::Gnuplot;
 
 my $chart = Chart::Gnuplot->new(
-    output => "gallery/ticFmt_2.png",
-    xlabel => "Specify the tics to label",
-    xtics  => {
-        labels => [1, 2, 5, 7, 8],
+    output => "gallery/background_2.png",
+    title  => "Filling background color in the plot area",
+    plotbg     => {
+        color   => "#c9c9ff",
+        density => 0.2,
     },
 );
 

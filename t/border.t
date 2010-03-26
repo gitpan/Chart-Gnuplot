@@ -1,38 +1,24 @@
 #!/usr/bin/perl -w
 use strict;
-use Test::More (tests => 2);
+use Test::More (tests => 1);
 
 BEGIN {use Chart::Gnuplot;}
 
 my $temp = "temp.ps";
 
-# Test default setting of chart title
+# Test formatting the gridlines
 {
     my $c = Chart::Gnuplot->new(
         output => $temp,
-        title  => "My chart title",
-    );
-
-    $c->_setChart();
-    ok(&diff($c->{_script}, "chartTitle_1.gp") == 0);
-}
-
-
-# Test formatting the chart title
-{
-    my $c = Chart::Gnuplot->new(
-        output => $temp,
-        title  => {
-            text     => "My chart title in {/Symbol-Oblique greek}",
-            font     => "Courier, 30",
-            color    => "pink",
-            offset   => "3,2",
-            enhanced => "on",
+        border => {
+            linetype => 3,
+            width    => 2,
+            color    => '#ff00ff',
         },
     );
 
     $c->_setChart();
-    ok(&diff($c->{_script}, "chartTitle_2.gp") == 0);
+    ok(&diff($c->{_script}, "border_1.gp") == 0);
 }
 
 ###################################################################

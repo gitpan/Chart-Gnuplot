@@ -3,11 +3,10 @@ use strict;
 use Chart::Gnuplot;
 
 my $chart = Chart::Gnuplot->new(
-    output => "gallery/bg_1.png",
-    title  => "Filling background color in the chart",
-    bg     => {
-        color   => "#c9c9ff",
-        density => 0.2,
+    output => "gallery/axisTics_5.png",
+    xlabel => "Tic labels in times-italic",
+    xtics  => {
+        font => "Times-Italic",
     },
 );
 

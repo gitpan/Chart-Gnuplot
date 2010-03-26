@@ -4,7 +4,7 @@ use Chart::Gnuplot;
 
 # Create the chart object
 my $chart = Chart::Gnuplot->new(
-    output  => 'gallery/ticFmt_13.png',
+    output  => 'gallery/axisTics_13.png',
     xtics   => {
         labelfmt  => '%.1g',         # label format
         font      => 'arial,18',     # font

@@ -3,11 +3,10 @@ use strict;
 use Chart::Gnuplot;
 
 my $chart = Chart::Gnuplot->new(
-    output => "gallery/ticFmt_10.png",
-    xlabel => "Longer tics",
+    output => "gallery/axisTics_1.png",
+    xlabel => "Three minor tics between every two major tics",
     xtics  => {
-        length => "5, 3",
-        minor  => 4,
+        minor => 3
     },
 );
 
