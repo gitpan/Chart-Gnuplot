@@ -1,5 +1,14 @@
 Change log for Chart::Gnuplot
 
+0.14
+    - Support drawing arbitrary arrows
+    - Support importing data as "points" for "financebars" and "candlesticks"
+      charts
+    - Better support of the terminals other than the default (postscript)
+    - Change using ImageMagick instead of ps2pdf to generate PDF from PS
+    - Fix the problem that the location of the text labels cannot be in
+      date/time format
+
 0.13
     - Improve error handling
     - Add method to copy the chart and data set objects

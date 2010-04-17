@@ -5,7 +5,7 @@ use Carp;
 use File::Copy qw(move);
 use File::Temp qw(tempdir);
 use Chart::Gnuplot::Util qw(_lineType _pointType _copy);
-$VERSION = '0.13';
+$VERSION = '0.14';
 
 # Constructor
 sub new
@@ -21,8 +21,11 @@ sub new
     }
 
     # Default terminal: postscript terminal with color drawing elements
-    $hash{terminal} = "postscript enhanced color" if
-        (!defined $hash{terminal} && !defined $hash{term});
+    if (!defined $hash{terminal} && !defined $hash{term})
+    {
+        $hash{terminal} = "postscript enhanced color";
+        $hash{_terminal} = 'auto';
+    }
 
     # Default setting
     if (defined $hash{output})
@@ -56,7 +59,7 @@ sub set
     my ($self, %opts) = @_;
     foreach my $opt (keys %opts)
     {
-        $self->$opt($opts{$opt});
+        ($opts{$opt} eq 'on')? $self->$opt('') : $self->$opt($opts{$opt});
     }
     return($self);
 }
@@ -253,8 +256,11 @@ sub _setChart
     if (defined $self->{imagesize})
     {
         my ($ws, $hs) = split(/,\s?/, $self->{imagesize});
-        $ws *= 10 if ($ws =~ /\D/); # for post terminal
-        $hs *= 7 if ($hs =~ /\D/);  # for post terminal
+        if (defined $self->{_terminal} && $self->{_terminal} eq 'auto')
+        {
+            $ws *= 10; # for post terminal
+            $hs *= 7;  # for post terminal
+        }
         $self->{terminal} .= " size $ws,$hs";
     }
 
@@ -461,6 +467,18 @@ sub _setChart
                 (print PLT "set $attr\n");
             push(@sets, $attr);
         }
+    }
+
+    # Write labels
+    foreach my $label (@{$self->{_labels}})
+    {
+        print PLT "set label $label\n";
+    }
+
+    # Draw arrows
+    foreach my $arrow (@{$self->{_arrows}})
+    {
+        print PLT "set arrow $arrow\n";
     }
     close(PLT);
 
@@ -935,15 +953,11 @@ sub _execute
     }
 
     # Convert the image to the user-specified format
-    if (defined $self->{output} && $self->{output} =~ /\./)
+    if (defined $self->{_terminal} && $self->{_terminal} eq 'auto')
     {
         my @a = split(/\./, $self->{output});
         my $ext = $a[-1];
-        if ( $self->{terminal} !~ /^$ext/ &&
-            ($self->{terminal} !~ /^post/ || $ext !~ /^e?ps$/) )
-        {
-            &convert($self, $ext);
-        }
+        &convert($self, $ext) if ($ext !~ /^e?ps$/);
     }
 }
 
@@ -1012,10 +1026,55 @@ sub label
         $out .= " lc $label{pointcolor}" if (defined $label{pointcolor});
     }
 
-    my $pltTmp = $self->{_script};
-    open(PLT, ">>$pltTmp") || confess("Can't write gnuplot script $pltTmp");
-    print PLT "set label $out\n";
-    close(PLT);
+    push(@{$self->{_labels}}, $out);
+    return($self);
+}
+
+
+# Arbitrary arrows placed in the chart
+#
+# Usage example:
+# $chart->arrow(
+#     from      => "0,2",
+#     to        => "0.3,0.1",
+#     linetype  => 'dash',
+#     width     => 2,
+#     color     => "dark-blue",
+#     headsize  => 3,
+#     head      => 'both',
+# );
+sub arrow
+{
+    my ($self, %arrow) = @_;
+    confess("Starting position of arrow not found") if (!defined $arrow{from});
+
+    my $out = '';
+    $out .= " from $arrow{from}";
+    $out .= " to $arrow{to}" if (defined $arrow{to});
+    $out .= " rto $arrow{rto}" if (defined $arrow{rto});
+    $out .= " linetype ".&_lineType($arrow{linetype}) if
+        (defined $arrow{linetype});
+    $out .= " linewidth $arrow{width}" if (defined $arrow{width});
+    $out .= " linecolor rgb \"$arrow{color}\"" if (defined $arrow{color});
+    $out .= " size $arrow{headsize}" if (defined $arrow{headsize});
+
+    if (defined $arrow{head})
+    {
+        if ($arrow{head} eq 'off')
+        {
+            $out .= " nohead";
+        }
+        elsif ($arrow{head} eq 'back')
+        {
+            $out .= " backhead";
+        }
+        elsif ($arrow{head} eq 'both')
+        {
+            $out .= " heads";
+        }
+    }
+
+    push(@{$self->{_arrows}}, $out);
     return($self);
 }
 
@@ -1061,50 +1120,39 @@ sub convert
     my $temp = "$self->{_script}.tmp";
     move($self->{output}, $temp);
 
-    if ($self->{terminal} =~ /^post/ && $imgfmt eq 'pdf')
+    # Execute gnuplot
+    my $convert = 'convert';
+    $convert = $self->{convert} if (defined $self->{convert});
+
+    # Rotate 90 deg for landscape image
+    if (defined $self->{orient} && $self->{orient} eq 'portrait')
     {
-        system("ps2pdf $temp $temp".".$imgfmt");
-    }
-    elsif ($self->{terminal} =~ /^pdf/ && $imgfmt eq 'ps')
-    {
-        system("pdf2ps $temp $temp".".$imgfmt");
+        my $cmd = "$convert $temp $temp".".$imgfmt 2>&1";
+        my $err = `$cmd`;
+        if (defined $err && $err ne '')
+        {
+            die "Unsupported image format ($imgfmt)\n" if
+                ($err =~ /^convert: unable to open module file/);
+
+            my ($errTmp) = ($err =~ /^convert: (.+)/);
+            die "$errTmp Perhaps the image format is not supported\n" if
+                (defined $errTmp);
+            die "$err\n";
+        }
     }
     else
     {
-        # Execute gnuplot
-        my $convert = 'convert';
-        $convert = $self->{convert} if (defined $self->{convert});
-
-        # Rotate 90 deg for landscape image
-        if (defined $self->{orient} && $self->{orient} eq 'portrait')
+        my $cmd = "$convert -rotate 90 $temp $temp".".$imgfmt 2>&1";
+        my $err = `$cmd`;
+        if (defined $err && $err ne '')
         {
-            my $cmd = "$convert $temp $temp".".$imgfmt 2>&1";
-            my $err = `$cmd`;
-            if (defined $err && $err ne '')
-            {
-                die "Unsupported image format ($imgfmt)\n" if
-                    ($err =~ /^convert: unable to open module file/);
+            die "Unsupported image format ($imgfmt)\n" if
+                ($err =~ /^convert: unable to open module file/);
 
-                my ($errTmp) = ($err =~ /^convert: (.+)/);
-                die "$errTmp Perhaps the image format is not supported\n" if
-                    (defined $errTmp);
-                die "$err\n";
-            }
-        }
-        else
-        {
-            my $cmd = "$convert -rotate 90 $temp $temp".".$imgfmt 2>&1";
-            my $err = `$cmd`;
-            if (defined $err && $err ne '')
-            {
-                die "Unsupported image format ($imgfmt)\n" if
-                    ($err =~ /^convert: unable to open module file/);
-
-                my ($errTmp) = ($err =~ /^convert: (.+)/);
-                die "$errTmp Perhaps the image format is not supported\n" if
-                    (defined $errTmp);
-                die "$err\n";
-            }
+            my ($errTmp) = ($err =~ /^convert: (.+)/);
+            die "$errTmp Perhaps the image format is not supported\n" if
+                (defined $errTmp);
+            die "$err\n";
         }
     }
 
@@ -1642,6 +1690,13 @@ sub _thaw
                 $xLast = $$pt[$i][0];
             }
         }
+        else
+        {
+            for(my $i = 0; $i < @$pt; $i++)
+            {
+                print DATA join(" ", @{$$pt[$i]}), "\n";
+            }
+        }
         close(DATA);
         $string = "'$fileTmp'";
 
@@ -1795,8 +1850,8 @@ Chart::Gnuplot - Plot graph using Gnuplot on the fly
 =head1 DESCRIPTION
 
 This module is to plot graphs uning GNUPLOT on the fly. In order to use this
-module, gnuplot need to be installed. If image format other than PS, PDF and
-EPS is required to generate, the convert program of ImageMagick is also needed.
+module, gnuplot need to be installed. If image format other than PS and EPS is
+required to generate, the convert program of ImageMagick is also needed.
 
 To plot chart using Chart::Gnuplot, a chart object and at least one dataset
 object are required. Information about the chart such as output file, chart
@@ -2039,7 +2094,7 @@ Size (length and height) of the image relative to the default. E.g.
 
 =head3 size
 
-Size of the chart relative to the chart size. This is useful in some
+Size of the plot relative to the chart size. This is useful in some
 multi-plot such as inset chart. E.g.
 
     size => "0.5, 0.4"
@@ -2103,9 +2158,10 @@ have multiple convert executables.
 
 =head3 terminal
 
-The terminal that Gnuplot use. The default terminal is "postscript". This
-attribute is not recommended to be changed unless you are familiar with the
-Gnuplot syntax.  Please test carefully before using this in production code.
+The terminal driver that Gnuplot uses. The default terminal is "postscript".
+This attribute is not recommended to be changed unless you are familiar with
+the Gnuplot syntax. Please check the output image carefully if you use this in
+production code.
 
 Terminal is not necessarily related to the output image format. You may convert
 the image format by the C<convert()> method.
@@ -2169,6 +2225,20 @@ Add an arbitrary text label. e.g.,
         pointtype  => 3,
         pointsize  => 5,
         pointcolor => "blue",
+    );
+
+=head3 arrow
+
+Draw arbitrary arrow. e.g.,
+
+    $chart->arrow(
+        from      => "0,2",
+        to        => "0.3,0.1",
+        linetype  => 'dash',
+        width     => 2,
+        color     => "dark-blue",
+        headsize  => 3,
+        head      => 'both',
     );
 
 =head3 copy
@@ -2653,10 +2723,6 @@ L<File::Copy>, L<File::Temp>, L<Storable>
 Gnuplot L<http://www.gnuplot.info>
 
 ImageMagick L<http://www.imagemagick.org> (for full feature)
-
-=head1 TEST ENVIRONMENT
-
-This version is tested against Gnuplot 4.2.0 to 4.2.4 in Linux.
 
 =head1 SEE ALSO
 
