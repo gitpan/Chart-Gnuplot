@@ -1,5 +1,9 @@
 Change log for Chart::Gnuplot
 
+0.15
+    - Fix the problem that "orient" has no effect if "imagesize" is set
+    - Fix setting color of the label point
+
 0.14
     - Support drawing arbitrary arrows
     - Support importing data as "points" for "financebars" and "candlesticks"

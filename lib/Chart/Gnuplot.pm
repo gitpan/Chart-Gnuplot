@@ -5,7 +5,7 @@ use Carp;
 use File::Copy qw(move);
 use File::Temp qw(tempdir);
 use Chart::Gnuplot::Util qw(_lineType _pointType _copy);
-$VERSION = '0.14';
+$VERSION = '0.15';
 
 # Constructor
 sub new
@@ -258,8 +258,17 @@ sub _setChart
         my ($ws, $hs) = split(/,\s?/, $self->{imagesize});
         if (defined $self->{_terminal} && $self->{_terminal} eq 'auto')
         {
-            $ws *= 10; # for post terminal
-            $hs *= 7;  # for post terminal
+            # for post terminal
+            if (defined $self->{orient} && $self->{orient} eq 'portrait')
+            {
+                $ws *= 7 if ($ws =~ /^([1-9]\d*)?0?(\.\d+)?$/);
+                $hs *= 10 if ($hs =~ /^([1-9]\d*)?0?(\.\d+)?$/);
+            }
+            else
+            {
+                $ws *= 10 if ($ws =~ /^([1-9]\d*)?0?(\.\d+)?$/);
+                $hs *= 7 if ($hs =~ /^([1-9]\d*)?0?(\.\d+)?$/);
+            }
         }
         $self->{terminal} .= " size $ws,$hs";
     }
@@ -942,7 +951,9 @@ sub _execute
     $gnuplot = $self->{gnuplot} if (defined $self->{gnuplot});
     my $cmd = "$gnuplot $self->{_script}";
     $cmd .= " -" if ($self->{terminal} =~ /^(ggi|pm|windows|wxt|x11)(\s|$)/);
-    my $err = `$cmd 2>&1`;
+#    my $err = `$cmd 2>&1`;
+    my $err;
+    system("$cmd");
 
     # Capture and process error message from Gnuplot
     if (defined $err && $err ne '')
@@ -1023,7 +1034,8 @@ sub label
         $out .= " pt ".&_pointType($label{pointtype}) if
             (defined $label{pointtype});
         $out .= " ps $label{pointsize}" if (defined $label{pointsize});
-        $out .= " lc $label{pointcolor}" if (defined $label{pointcolor});
+        $out .= " lc rgb \"$label{pointcolor}\"" if
+            (defined $label{pointcolor});
     }
 
     push(@{$self->{_labels}}, $out);
