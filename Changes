@@ -1,5 +1,11 @@
 Change log for Chart::Gnuplot
 
+0.16
+    - Add support of creating animated gif
+    - Option to unset "(x|y)tics" and "border"
+      (Thanks to Adam Russell)
+    - Improve POD
+
 0.15
     - Fix the problem that "orient" has no effect if "imagesize" is set
     - Fix setting color of the label point

@@ -1,6 +1,6 @@
 Description
 ===========
-Plot graph using Gnuplot on the fly
+Plot graph using Gnuplot in Perl on the fly
 
 Build and install
 =================
@@ -11,12 +11,13 @@ make install
 
 Prerequisites
 =============
+Carp v 1.04 or later
 File::Copy v2.08 or later
 File::Temp v0.14 or later
 Storable v2.15 or later
 
 Copyright
 =========
-Copyright (c) 2008-2010 Ka-Wai Mak. All rights reserved.
+Copyright (c) 2008-2011 Ka-Wai Mak. All rights reserved.
 This program is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself.

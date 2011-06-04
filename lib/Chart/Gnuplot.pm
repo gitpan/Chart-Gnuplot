@@ -5,7 +5,7 @@ use Carp;
 use File::Copy qw(move);
 use File::Temp qw(tempdir);
 use Chart::Gnuplot::Util qw(_lineType _pointType _copy);
-$VERSION = '0.15';
+$VERSION = '0.16';
 
 # Constructor
 sub new
@@ -412,24 +412,31 @@ sub _setChart
         }
         elsif ($attr =~ /^(x|y|x2|y2|z)tics$/)
         {
-            my ($axis) = ($attr =~ /^(.+)tics$/);
-            print PLT "set $attr".&_setTics($self->{$attr})."\n";
-            if (ref($self->{$attr}) eq 'HASH')
+            if (defined $self->{$attr})
             {
-                if (defined ${$self->{$attr}}{labelfmt})
+                my ($axis) = ($attr =~ /^(.+)tics$/);
+                print PLT "set $attr".&_setTics($self->{$attr})."\n";
+                if (ref($self->{$attr}) eq 'HASH')
                 {
-                    print PLT "set format $axis ".
-                        "\"${$self->{$attr}}{labelfmt}\"\n";
-                    push(@sets, 'format');
+                    if (defined ${$self->{$attr}}{labelfmt})
+                    {
+                        print PLT "set format $axis ".
+                            "\"${$self->{$attr}}{labelfmt}\"\n";
+                        push(@sets, 'format');
+                    }
+                    if (defined ${$self->{$attr}}{minor})
+                    {
+                        my $nTics = ${$self->{$attr}}{minor}+1;
+                        print PLT "set m$axis"."tics $nTics\n";
+                        push(@sets, "m$axis"."tics");
+                    }
                 }
-                if (defined ${$self->{$attr}}{minor})
-                {
-                    my $nTics = ${$self->{$attr}}{minor}+1;
-                    print PLT "set m$axis"."tics $nTics\n";
-                    push(@sets, "m$axis"."tics");
-                }
+                push(@sets, $attr);
             }
-            push(@sets, $attr);
+            else
+            {
+                print PLT "unset $attr\n";
+            }
         }
         elsif ($attr eq 'legend')
         {
@@ -438,8 +445,15 @@ sub _setChart
         }
         elsif ($attr eq 'border')
         {
-            print PLT "set border".&_setBorder($self->{border})."\n";
-            push(@sets, 'border');
+            if (defined $self->{border})
+            {
+                print PLT "set border".&_setBorder($self->{border})."\n";
+                push(@sets, 'border');
+            }
+            else
+            {
+                print PLT "unset border\n";
+            }
         }
         elsif ($attr =~ /^(minor)?grid$/)
         {
@@ -951,9 +965,9 @@ sub _execute
     $gnuplot = $self->{gnuplot} if (defined $self->{gnuplot});
     my $cmd = "$gnuplot $self->{_script}";
     $cmd .= " -" if ($self->{terminal} =~ /^(ggi|pm|windows|wxt|x11)(\s|$)/);
-#    my $err = `$cmd 2>&1`;
-    my $err;
-    system("$cmd");
+    my $err = `$cmd 2>&1`;
+#    my $err;
+#    system("$cmd");
 
     # Capture and process error message from Gnuplot
     if (defined $err && $err ne '')
@@ -1111,6 +1125,68 @@ sub test
     my $gnuplot = 'gnuplot';
     $gnuplot = $self->{gnuplot} if (defined $self->{gnuplot});
     system("$gnuplot $pltTmp");
+    return($self);
+}
+
+
+# Create animated gif
+#
+# Usage example:
+# $chart->animate(
+#     charts => \@charts,   # sequence of chart object
+#     delay  => 10,         # delay in units of 0.01 second
+# );
+sub animate
+{
+    my ($self, %animate) = @_;
+    my $charts = $animate{charts};
+
+    # Force the terminal to be 'gif'
+    # - Only the 'gif' terminal supports animation
+    if (defined $self->{_terminal} && $self->{_terminal} eq 'auto')
+    {
+        $self->{terminal} = $self->{_terminal} = 'gif';
+    }
+    elsif ($self->{terminal} !~ /^gif/)
+    {
+        croak "animate() is supported only by the gif terminal";
+    }
+    $self->{terminal} .= " animate";
+    $self->{terminal} .= " delay $animate{delay}" if (defined $animate{delay});
+
+    &_setChart($self);
+
+    open(PLT, ">>$self->{_script}") || confess("Can't write $self->{_script}");
+
+    foreach my $chart (@$charts)
+    {
+        $chart->_script($self->{_script});
+        $chart->_multiplot(1);
+
+        my $plot;
+        my @dataSet;
+        if (defined $chart->{_dataSets2D})
+        {
+            $plot = 'plot';
+            @dataSet = @{$chart->{_dataSets2D}};
+        }
+        elsif (defined $chart->{_dataSets3D})
+        {
+            $plot = 'splot';
+            @dataSet = @{$chart->{_dataSets3D}};
+        }
+    
+        &_setChart($chart, \@dataSet);
+        open(PLT, ">>$self->{_script}") ||
+            confess("Can't write $self->{_script}");
+        print PLT "\n$plot ";
+        print PLT join(', ', map {$_->_thaw($self)} @dataSet), "\n";
+        close(PLT);
+        &_reset($chart);
+    }
+
+    # Generate image file
+    &_execute($self);
     return($self);
 }
 
@@ -1823,7 +1899,7 @@ __END__
 
 =head1 NAME
 
-Chart::Gnuplot - Plot graph using Gnuplot on the fly
+Chart::Gnuplot - Plot graph using Gnuplot in Perl on the fly
 
 =head1 SYNOPSIS
 
@@ -1861,9 +1937,9 @@ Chart::Gnuplot - Plot graph using Gnuplot on the fly
 
 =head1 DESCRIPTION
 
-This module is to plot graphs uning GNUPLOT on the fly. In order to use this
-module, gnuplot need to be installed. If image format other than PS and EPS is
-required to generate, the convert program of ImageMagick is also needed.
+This Perl module is to plot graphs uning GNUPLOT on the fly. In order to use
+this module, gnuplot need to be installed. If image format other than PS and
+EPS is required to generate, the convert program of ImageMagick is also needed.
 
 To plot chart using Chart::Gnuplot, a chart object and at least one dataset
 object are required. Information about the chart such as output file, chart
@@ -1878,7 +1954,7 @@ using the plot2d, plot3d or multiplot method of the chart object, e.g.
     $chart->plot2d($dataSet1, $dataSet2, ...);
 
 To illustate the features of Chart::Gnuplot, the best way is to show by
-examples. A lot of examples are provided in the package.
+examples. A lot of examples can be found in SourceForge L<http://chartgnuplot.sourceforge.net>.
 
 =head1 CHART OBJECT
 
@@ -1965,14 +2041,17 @@ Range of the x-axis, y-axis and z-axis in the plot, e.g.
 
     xrange => [0, "pi"]
 
+would make the plot from x = 0 to x = 3.14159...
+
 =head3 x2range, y2range
 
-Range of the secondary axes in the plot. See L<xrange>.
+Range of the secondary (top horizontal and right vertical) axes of the plot.
+See L<xrange, yrange, zrange>.
 
 =head3 trange, urange, vrange
 
 Range of the parametric parameter (t for 2D plots, while u and v for 3D plots).
-See L<xrange>.
+See L<xrange, yrange, zrange>.
 
 =head3 xtics, ytics, ztics
 
@@ -1983,6 +2062,13 @@ The tics and tic label on the x-axis, y-axis and z-axis. E.g.
       labelfmt => "%3f",
       ....
    }
+
+If you set this to C<undef>. E.g.,
+
+    xtics => undef
+
+Then this option will be explicitly I<unset> and the chart will have not have
+tic marks on the specified axis.
 
 Supported properties are:
 
@@ -2060,6 +2146,13 @@ E.g.
         width    => 2,
         color    => '#ff00ff',
     }
+
+If you set this to C<undef>. E.g.,
+
+    border => undef
+
+Then this option will be explicitly I<unset> and the chart will have not have
+any border.
 
 =head3 grid
 
@@ -2213,15 +2306,47 @@ object. It is not yet completed. Only basic features are supported.
 
 Plot multiple charts in the same image.
 
+=head3 animate
+
+Create animated gif. E.g.
+
+    my $chart = Chart::Gnuplot->new(
+        output => "animate.gif",
+    );
+
+    my $T = 30; # number of frames
+    my @c;
+    for (my $i = 0; $i < $T; $i++)
+    {
+        $c[$i] = Chart::Gnuplot->new(xlabel => 'x');
+        my $ds = Chart::Gnuplot::DataSet->new(
+            func => "sin($i*2*pi/$T + x)",
+        );
+        $c[$i]->add2d($ds);
+    }
+
+    $chart->animate(
+        charts => \@c,
+        delay  => 10,   # delay 0.1 sec between successive images
+    );
+
+Supported properties are:
+
+    charts : chart sequence used to create the animation
+    delay  : delay (in units of 0.01 second) between successive images, default
+           : value is 5
+
+See L<add2d> and L<add3d>.
+
 =head3 add2d
 
 Add a 2D dataset to a chart without plotting it out immediately. Used with
-C<multiplot>.
+C<multiplot> or C<animate>.
 
 =head3 add3d
 
 Add a 3D dataset to a chart without plotting it out immediately. Used with
-C<multiplot>.
+C<multiplot> or C<animate>.
 
 =head3 label
 
@@ -2730,7 +2855,7 @@ y-axis.
 
 =head1 REQUIREMENTS
 
-L<File::Copy>, L<File::Temp>, L<Storable>
+L<Carp>, L<File::Copy>, L<File::Temp>, L<Storable>
 
 Gnuplot L<http://www.gnuplot.info>
 
@@ -2746,7 +2871,7 @@ Ka-Wai Mak <kwmak@cpan.org>
 
 =head1 COPYRIGHT
 
-Copyright (c) 2008-2010 Ka-Wai Mak. All rights reserved.
+Copyright (c) 2008-2011 Ka-Wai Mak. All rights reserved.
 
 =head1 LICENSE
 
