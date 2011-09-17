@@ -4,7 +4,7 @@ use vars qw(@ISA @EXPORT_OK);
 use Exporter;
 
 @ISA = qw(Exporter);
-@EXPORT_OK = qw(_lineType _pointType _copy);
+@EXPORT_OK = qw(_lineType _pointType _borderCode _copy);
 
 # Convert named line type to indexed line type of gnuplot
 #
@@ -70,6 +70,30 @@ sub _pointType
 		'opaque-pentagon' => 75,
 	);
 	return($type{$type});
+}
+
+
+# Encode the border name
+# - Used by setting graph border display
+sub _borderCode
+{
+    my ($side) = @_;
+    return($side) if ($side =~ /^\d+$/);
+
+    my $code = 0;
+    $code += 1 if ($side =~ /(^|,)\s*(1|bottom|bottom left front)\s*(,|$)/);
+    $code += 2 if ($side =~ /(^|,)\s*(2|left|bottom left back)\s*(,|$)/);
+    $code += 4 if ($side =~ /(^|,)\s*(4|top|bottom right front)\s*(,|$)/);
+    $code += 8 if ($side =~ /(^|,)\s*(8|right|bottom right back)\s*(,|$)/);
+    $code += 16 if ($side =~ /(^|,)\s*(16|left vertical)\s*(,|$)/);
+    $code += 32 if ($side =~ /(^|,)\s*(32|back vertical)\s*(,|$)/);
+    $code += 64 if ($side =~ /(^|,)\s*(64|right vertical)\s*(,|$)/);
+    $code += 128 if ($side =~ /(^|,)\s*(128|front vertical)\s*(,|$)/);
+    $code += 256 if ($side =~ /(^|,)\s*(256|top left back)\s*(,|$)/);
+    $code += 512 if ($side =~ /(^|,)\s*(512|top right back)\s*(,|$)/);
+    $code += 1024 if ($side =~ /(^|,)\s*(1024|top left front)\s*(,|$)/);
+    $code += 2048 if ($side =~ /(^|,)\s*(2048|top right front)\s*(,|$)/);
+    return($code);
 }
 
 

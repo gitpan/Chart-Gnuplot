@@ -4,8 +4,8 @@ use vars qw($VERSION);
 use Carp;
 use File::Copy qw(move);
 use File::Temp qw(tempdir);
-use Chart::Gnuplot::Util qw(_lineType _pointType _copy);
-$VERSION = '0.16';
+use Chart::Gnuplot::Util qw(_lineType _pointType _borderCode _copy);
+$VERSION = '0.17';
 
 # Constructor
 sub new
@@ -390,8 +390,10 @@ sub _setChart
             if (ref($self->{$attr}) eq 'ARRAY')
             {
                 # Deal with ranges from array reference
-                if (defined $self->{timeaxis})
+                if (defined $self->{timeaxis} &&
+                    $self->{timeaxis} =~ /(^|,)\s*$1\s*(,|$)/)
                 {
+                    # $1-axis is a time axis
                     print PLT "set $attr ['".join("':'", @{$self->{$attr}}).
                         "']\n";
                 }
@@ -447,7 +449,10 @@ sub _setChart
         {
             if (defined $self->{border})
             {
-                print PLT "set border".&_setBorder($self->{border})."\n";
+                print PLT "set border";
+                print PLT " ".&_borderCode($self->{border}->{sides}) if
+                    (defined $self->{border}->{sides});
+                print PLT &_setBorder($self->{border})."\n";
                 push(@sets, 'border');
             }
             else
@@ -2138,14 +2143,36 @@ means that the x-axis and y2-axis are data/time axes.
 
 =head3 border
 
-Border of the graph. Properties supported are "linetype", "width", and "color".
-E.g.
+Border of the graph. Properties supported are "sides", "linetype", "width", and
+"color". E.g.
 
     border => {
+        sides    => "bottom, left",
         linetype => 3,
         width    => 2,
         color    => '#ff00ff',
     }
+
+C<sides> tells which side(s) will be displayed. Default is all four borders for
+2D plots, and four bottom and left vertial borders for 3D plots. Acceptable
+valurs are the 12-bit code (see the Gnuplot manual) or the following names:
+
+    bottom
+    left
+    top
+    right
+    bottom left front
+    bottom left back
+    bottom right front
+    bottom right back
+    left vertical
+    right vertical
+    front vertical
+    back vertical
+    top left front
+    top left back
+    top right front
+    top right back
 
 If you set this to C<undef>. E.g.,
 
@@ -2837,7 +2864,7 @@ y-axis.
 
 =back
 
-=head1 FUTURE PLAN
+=head1 WISH LIST
 
 =over
 

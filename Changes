@@ -1,5 +1,10 @@
 Change log for Chart::Gnuplot
 
+0.17
+    - NEW control the display of arbitrary border of the graph
+    - FIX expression of range of numeric axis if time axis exists
+      (Bug ID: 69169)
+
 0.16
     - Add support of creating animated gif
     - Option to unset "(x|y)tics" and "border"

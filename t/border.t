@@ -1,12 +1,12 @@
 #!/usr/bin/perl -w
 use strict;
-use Test::More (tests => 1);
+use Test::More (tests => 2);
 
 BEGIN {use Chart::Gnuplot;}
 
 my $temp = "temp.ps";
 
-# Test formatting the gridlines
+# Test formatting the border
 {
     my $c = Chart::Gnuplot->new(
         output => $temp,
@@ -19,6 +19,22 @@ my $temp = "temp.ps";
 
     $c->_setChart();
     ok(&diff($c->{_script}, "border_1.gp") == 0);
+}
+
+# Test formatting the specified borders
+{
+    my $c = Chart::Gnuplot->new(
+        output => $temp,
+        border => {
+            sides    => "left, bottom",
+            linetype => 3,
+            width    => 2,
+            color    => '#ff00ff',
+        },
+    );
+
+    $c->_setChart();
+    ok(&diff($c->{_script}, "border_2.gp") == 0);
 }
 
 ###################################################################

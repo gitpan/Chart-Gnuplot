@@ -117,6 +117,7 @@ t/axisLabel.t
 t/axisTics_1.gp
 t/axisTics.t
 t/border_1.gp
+t/border_2.gp
 t/border.t
 t/copy_1.dat
 t/copy_1.gp
