@@ -5,7 +5,7 @@ use Carp;
 use File::Copy qw(move);
 use File::Temp qw(tempdir);
 use Chart::Gnuplot::Util qw(_lineType _pointType _borderCode _copy);
-$VERSION = '0.17';
+$VERSION = '0.18';
 
 # Constructor
 sub new
@@ -949,8 +949,8 @@ sub _setTimestamp
     if (ref($ts) eq 'HASH')
     {
         $out .= " \"$$ts{fmt}\"" if (defined $$ts{fmt});
-        $out .= " $$ts{offset}" if (defined $$ts{offset});
-        $out .= " \"$$ts{font}\"" if (defined $$ts{font});
+        $out .= " offset $$ts{offset}" if (defined $$ts{offset});
+        $out .= " font \"$$ts{font}\"" if (defined $$ts{font});
     }
     elsif ($ts ne 'on')
     {
@@ -965,10 +965,33 @@ sub _execute
 {
     my ($self) = @_;
 
-    # Execute gnuplot
+	# Try to find the executable of Gnuplot
     my $gnuplot = 'gnuplot';
-    $gnuplot = $self->{gnuplot} if (defined $self->{gnuplot});
-    my $cmd = "$gnuplot $self->{_script}";
+	if (defined $self->{gnuplot})
+	{
+    	$gnuplot = $self->{gnuplot};
+	}
+	else
+	{
+		if ($^O eq 'MSWin32')
+		{
+			my $gnuplotDir = 'C:\Program Files\gnuplot';
+			$gnuplotDir = 'C:\Program Files (x86)\gnuplot' if (!-e $gnuplotDir);
+
+			my $binDir = $gnuplotDir.'\bin';
+			$binDir = $gnuplotDir.'\binary' if (!-e $binDir);
+
+			$gnuplot = $binDir.'\gnuplot.exe';
+			if (!-e $gnuplot)
+			{
+				$gnuplot = $binDir.'\wgnuplot.exe';
+				confess("Gnuplot command not found.") if (!-e $gnuplot);
+			}
+		}
+	}
+
+    # Execute gnuplot
+    my $cmd = qq("$gnuplot" "$self->{_script}");
     $cmd .= " -" if ($self->{terminal} =~ /^(ggi|pm|windows|wxt|x11)(\s|$)/);
     my $err = `$cmd 2>&1`;
 #    my $err;
@@ -1220,7 +1243,7 @@ sub convert
     # Rotate 90 deg for landscape image
     if (defined $self->{orient} && $self->{orient} eq 'portrait')
     {
-        my $cmd = "$convert $temp $temp".".$imgfmt 2>&1";
+		my $cmd = qq("$convert" $temp $temp.$imgfmt 2>&1);
         my $err = `$cmd`;
         if (defined $err && $err ne '')
         {
@@ -1235,7 +1258,7 @@ sub convert
     }
     else
     {
-        my $cmd = "$convert -rotate 90 $temp $temp".".$imgfmt 2>&1";
+		my $cmd = qq("$convert" -rotate 90 $temp $temp.$imgfmt 2>&1);
         my $err = `$cmd`;
         if (defined $err && $err ne '')
         {
@@ -1250,7 +1273,7 @@ sub convert
     }
 
     # Remove the temp file
-    move("$temp".".$imgfmt", $self->{output});
+    move("$temp.$imgfmt", $self->{output});
     unlink($temp);
     return($self);
 }
@@ -1944,7 +1967,9 @@ Chart::Gnuplot - Plot graph using Gnuplot in Perl on the fly
 
 This Perl module is to plot graphs uning GNUPLOT on the fly. In order to use
 this module, gnuplot need to be installed. If image format other than PS and
-EPS is required to generate, the convert program of ImageMagick is also needed.
+EPS is required to generate, it is recommended to install the convert program
+of ImageMagick as well. Please refer to L<MECHANISM OF THIS MODULE> for
+details.
 
 To plot chart using Chart::Gnuplot, a chart object and at least one dataset
 object are required. Information about the chart such as output file, chart
@@ -1953,13 +1978,35 @@ contains information about the dataset to be plotted, including source of the
 data points, dataset label, color used to plot and more.
 
 After chart object and dataset object(s) are created, the chart can be plotted
-using the plot2d, plot3d or multiplot method of the chart object, e.g.
+using the L<plot2d>, L<plot3d> or L<multiplot> method of the chart object, e.g.
 
     # $chart is the chart object
     $chart->plot2d($dataSet1, $dataSet2, ...);
 
 To illustate the features of Chart::Gnuplot, the best way is to show by
-examples. A lot of examples can be found in SourceForge L<http://chartgnuplot.sourceforge.net>.
+examples. A lot of examples can be found in SourceForge
+L<http://chartgnuplot.sourceforge.net>.
+
+=head1 MECHANISM OF THIS MODULE
+
+Casual users may skip this session.
+
+When the plotting method (e.g. L<plot2d>) is called, Chart::Gnuplot would
+generate a Gnuplot script based on the information in the chart object and
+dataset object. Then it would call the Gnuplot program. Unless specified
+explicitly in L<terminal> of the Chart object, Chart::Gnuplot would by default
+generate the image in PS format first and then convert the image (by
+ImageMagick) based on the extension of the filename. The rationale of this
+approach is that the postscript terminal is so far the best developed teriminal
+and so this would let users to enjoy the power of Gnuplot as much as possible.
+
+Because the default terminal is postscript, if ImageMagick is not installed,
+you would always need to specify the L<terminal> if the output format is not PS
+(or EPS).
+
+On the other hand, for some image formats, e.g. mousing supported SVG, which
+ImageMagick cannot be converted to, the terminal must be set explicitly (e.g.,
+C<svg mousing> in this case).
 
 =head1 CHART OBJECT
 
@@ -1972,12 +2019,16 @@ may be specified optionally when the object is initiated:
 
 =head3 output
 
-Output file of the graph. By default, the image format is detected
-automatically by the extension of the filename. However, it can also be changed
-manually by using the format conversion methods such as C<convert> and C<png>
-(see sessions below).
+Output file of the graph. E.g.
 
-The supported image formats are:
+    output => "fig/chart.png",
+
+By default, the image format is detected automatically by the extension of the
+filename. (Please refer to L<MECHANISM OF THIS MODULE> for details). However,
+it can also be changed manually by the L<terminal> option or the format
+conversion methods such as L<convert> and L<png>.
+
+Some of image formats that can be detected automatically are:
 
     bmp  : Microsoft Windows bitmap
     epdf : Encapsulated Portable Document Format
@@ -1992,7 +2043,7 @@ The supported image formats are:
     psd  : Adobe Photoshop bitmap file
     xpm  : X Windows system pixmap
 
-If the filename has no extension, postscipt will be used.
+If the filename has no extension, postscipt format will be output.
 
 =head3 title
 
@@ -2281,7 +2332,7 @@ experimental. See L<bg>.
 The path of Gnuplot executable. This option is useful if you are using Windows
 or have multiple versions of Gnuplot installed. E.g.,
 
-    gnuplot => "C:\Program Files\...\gnuplot\bin\wgnuplot.exe";   # for Windows
+    gnuplot => "C:\Program Files\...\gnuplot\bin\wgnuplot.exe"   # for Windows
 
 =head3 convert
 
@@ -2290,13 +2341,13 @@ have multiple convert executables.
 
 =head3 terminal
 
-The terminal driver that Gnuplot uses. The default terminal is "postscript".
-This attribute is not recommended to be changed unless you are familiar with
-the Gnuplot syntax. Please check the output image carefully if you use this in
-production code.
+The terminal driver that Gnuplot uses. E.g.,
 
-Terminal is not necessarily related to the output image format. You may convert
-the image format by the C<convert()> method.
+    terminal => 'svg mousing'
+
+The default value is C<postscript enhanced color>. Terminal is not necessarily
+related to the output image format. E.g., you may use gif terminal and then
+convert the image format to jpg by the L<convert()> method.
 
 =head2 Chart Methods
 
@@ -2329,7 +2380,7 @@ object. It is not yet completed. Only basic features are supported.
 
 =head3 multiplot
 
-    $chert->multiplot(@charts);
+    $chart->multiplot(@charts);
 
 Plot multiple charts in the same image.
 
@@ -2423,10 +2474,9 @@ You may also make multiple copies . E.g.
 
 =head3 convert
 
-    $chart->convert($imageFmt);
+Convert the image format by ImageMagick, e.g.
 
-Convert the image format to C<$imageFmt>. See L<Chart Options> for supported
-image formats.
+    $chart->convert('png');
 
 =head3 png
 

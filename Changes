@@ -1,5 +1,14 @@
 Change log for Chart::Gnuplot
 
+0.18
+   - Add try to guess the path of the gnuplot executable in Windows
+	 (Bug ID: 82525)
+   - CHG improve POD
+   - CHG use qq() instead of "" in Gnuplot command line construction
+	 (Bug ID: 82525)
+   - CHG use qq() instead of "" in convert command line construction
+   - FIX offset and font options of the time stamp
+
 0.17
     - NEW control the display of arbitrary border of the graph
     - FIX expression of range of numeric axis if time axis exists

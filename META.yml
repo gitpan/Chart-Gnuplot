@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Chart-Gnuplot
-version:            0.17
+version:            0.18
 abstract:           Plot graph using Gnuplot in Perl on the fly
 author:
     - Ka-Wai Mak
@@ -19,7 +19,7 @@ no_index:
     directory:
         - t
         - inc
-generated_by:       ExtUtils::MakeMaker version 6.50
+generated_by:       ExtUtils::MakeMaker version 6.57_05
 meta-spec:
     url:      http://module-build.sourceforge.net/META-spec-v1.4.html
     version:  1.4
