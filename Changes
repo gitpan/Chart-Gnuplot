@@ -1,11 +1,20 @@
 Change log for Chart::Gnuplot
 
+0.19
+   - NEW support drawing arbitrary rectangles, ellipses and circles
+   - NEW Perlish setting of arrow head of arbitary arrows
+   - NEW support filling pattern in box-type styles
+   - NEW support setting color for the border of the box-type styles
+   - NEW support curve fitting (experimental)
+   - CHG check OS using /MSWin/ instead of "MSWin32" for safty
+   - FIX grid options syntax error if the options are not in hash form
+
 0.18
    - Add try to guess the path of the gnuplot executable in Windows
-	 (Bug ID: 82525)
+     (Bug ID: 82525)
    - CHG improve POD
    - CHG use qq() instead of "" in Gnuplot command line construction
-	 (Bug ID: 82525)
+     (Bug ID: 82525)
    - CHG use qq() instead of "" in convert command line construction
    - FIX offset and font options of the time stamp
 

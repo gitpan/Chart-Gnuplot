@@ -4,8 +4,8 @@ use vars qw($VERSION);
 use Carp;
 use File::Copy qw(move);
 use File::Temp qw(tempdir);
-use Chart::Gnuplot::Util qw(_lineType _pointType _borderCode _copy);
-$VERSION = '0.18';
+use Chart::Gnuplot::Util qw(_lineType _pointType _borderCode _fillStyle _copy);
+$VERSION = '0.19';
 
 # Constructor
 sub new
@@ -16,7 +16,7 @@ sub new
     if (!defined $hash{_multiplot})     # if not in multiplot mode
     {
         my $dirTmp = tempdir(CLEANUP => 1);
-        ($^O eq 'MSWin32')? ($dirTmp .= '\\'): ($dirTmp .= '/');
+        ($^O =~ /MSWin/)? ($dirTmp .= '\\'): ($dirTmp .= '/');
         $hash{_script} = $dirTmp . "plot";
     }
 
@@ -500,13 +500,19 @@ sub _setChart
     # Write labels
     foreach my $label (@{$self->{_labels}})
     {
-        print PLT "set label $label\n";
+        print PLT "set label"."$label\n";
     }
 
     # Draw arrows
     foreach my $arrow (@{$self->{_arrows}})
     {
-        print PLT "set arrow $arrow\n";
+        print PLT "set arrow"."$arrow\n";
+    }
+
+    # Draw objects
+    foreach my $object (@{$self->{_objects}})
+    {
+        print PLT "set object"."$object\n";
     }
     close(PLT);
 
@@ -781,7 +787,7 @@ sub _setGrid
     {
         if (defined $grid)
         {
-            return($grid) if ($grid !~ /^(on|off)$/);
+            return(" $grid") if ($grid !~ /^(on|off)$/);
             ($grid eq 'off')? ($out = " noxtics noytics"):
                 ($out = " xtics ytics");
         }
@@ -804,7 +810,7 @@ sub _gridString2Hash
 }
 
 
-# Set the details of the graph border
+# Set the details of the graph border and legend box border
 # - called by _setChart()
 #
 # Usage example:
@@ -827,8 +833,8 @@ sub _setBorder
     my $out = '';
     $out .= " linetype ".&_lineType($$border{linetype}) if
         (defined $$border{linetype});
-    $out .= " linewidth $$border{width}" if (defined $$border{width});
     $out .= " linecolor rgb \"$$border{color}\"" if (defined $$border{color});
+    $out .= " linewidth $$border{width}" if (defined $$border{width});
     return($out);
 }
 
@@ -965,30 +971,30 @@ sub _execute
 {
     my ($self) = @_;
 
-	# Try to find the executable of Gnuplot
+    # Try to find the executable of Gnuplot
     my $gnuplot = 'gnuplot';
-	if (defined $self->{gnuplot})
-	{
-    	$gnuplot = $self->{gnuplot};
-	}
-	else
-	{
-		if ($^O eq 'MSWin32')
-		{
-			my $gnuplotDir = 'C:\Program Files\gnuplot';
-			$gnuplotDir = 'C:\Program Files (x86)\gnuplot' if (!-e $gnuplotDir);
+    if (defined $self->{gnuplot})
+    {
+        $gnuplot = $self->{gnuplot};
+    }
+    else
+    {
+        if ($^O =~ /MSWin/)
+        {
+            my $gnuplotDir = 'C:\Program Files\gnuplot';
+            $gnuplotDir = 'C:\Program Files (x86)\gnuplot' if (!-e $gnuplotDir);
 
-			my $binDir = $gnuplotDir.'\bin';
-			$binDir = $gnuplotDir.'\binary' if (!-e $binDir);
+            my $binDir = $gnuplotDir.'\bin';
+            $binDir = $gnuplotDir.'\binary' if (!-e $binDir);
 
-			$gnuplot = $binDir.'\gnuplot.exe';
-			if (!-e $gnuplot)
-			{
-				$gnuplot = $binDir.'\wgnuplot.exe';
-				confess("Gnuplot command not found.") if (!-e $gnuplot);
-			}
-		}
-	}
+            $gnuplot = $binDir.'\gnuplot.exe';
+            if (!-e $gnuplot)
+            {
+                $gnuplot = $binDir.'\wgnuplot.exe';
+                confess("Gnuplot command not found.") if (!-e $gnuplot);
+            }
+        }
+    }
 
     # Execute gnuplot
     my $cmd = qq("$gnuplot" "$self->{_script}");
@@ -1059,7 +1065,7 @@ sub label
 {
     my ($self, %label) = @_;
 
-    my $out = "\"$label{text}\"";
+    my $out = " \"$label{text}\"";
     $out .= " at $label{position}" if (defined $label{position});
     $out .= " offset $label{offset}" if (defined $label{offset});
     $out .= " rotate by $label{rotate}" if (defined $label{rotate});
@@ -1089,21 +1095,26 @@ sub label
 #
 # Usage example:
 # $chart->arrow(
-#     from      => "0,2",
-#     to        => "0.3,0.1",
-#     linetype  => 'dash',
-#     width     => 2,
-#     color     => "dark-blue",
-#     headsize  => 3,
-#     head      => 'both',
+#     from     => "0,2",
+#     to       => "0.3,0.1",
+#     linetype => 'dash',
+#     width    => 2,
+#     color    => "dark-blue",
+#     head     => {
+#         size      => 3,
+#         angle     => 30,
+#         direction => 'back',
+#     },
 # );
+#
+# TODO:
+# - support layer <front/back>
 sub arrow
 {
     my ($self, %arrow) = @_;
     confess("Starting position of arrow not found") if (!defined $arrow{from});
 
-    my $out = '';
-    $out .= " from $arrow{from}";
+    my $out = " from $arrow{from}";
     $out .= " to $arrow{to}" if (defined $arrow{to});
     $out .= " rto $arrow{rto}" if (defined $arrow{rto});
     $out .= " linetype ".&_lineType($arrow{linetype}) if
@@ -1112,24 +1123,248 @@ sub arrow
     $out .= " linecolor rgb \"$arrow{color}\"" if (defined $arrow{color});
     $out .= " size $arrow{headsize}" if (defined $arrow{headsize});
 
-    if (defined $arrow{head})
+    # Set arrow head
+    $out .= &_setArrowHead($arrow{head}) if (defined $arrow{head});
+
+    push(@{$self->{_arrows}}, $out);
+    return($self);
+}
+
+
+# Set the options of arrow head
+sub _setArrowHead
+{
+    my ($head) = @_;
+    my $out = '';
+
+    # Personal comments:
+    # - The filling of arrow head does not follow the convention of fill style
+    #   of objects and plotting styles. Perhaps Gnuplot will change this in the
+    #   future.
+    # - Back-angle is not meaningful if filling is "nofilled". This constraint
+    #   may be removed theoretically.
+    # - Therefore, "backangle" and "fill" are disabled for the moment.
+    if (ref($head) eq 'HASH')
     {
-        if ($arrow{head} eq 'off')
+        my $size = (defined $$head{size})? $$head{size} : 0.45;
+        my $angle = (defined $$head{angle})? $$head{angle} : 15;
+        confess("arrow head size must be greater than 0") if ($size <= 0);
+
+        $out .= " size $size";
+        $out .= ",$angle" if ($size !~ /,/);
+#        $out .= ",$$head{backangle}" if (defined $$head{backangle});
+#        $out .= " $$head{fill}" if (defined $$head{fill});
+        if (defined $$head{direction})
+        {
+            if ($$head{direction} eq 'back')
+            {
+                $out .= " backhead";
+            }
+            elsif ($$head{direction} eq 'both')
+            {
+                $out .= " heads";
+            }
+            elsif ($$head{direction} eq 'off')
+            {
+                $out .= " nohead";
+            }
+        }
+    }
+    else
+    {
+        if ($head eq 'off')
         {
             $out .= " nohead";
         }
-        elsif ($arrow{head} eq 'back')
+        elsif ($head eq 'back')
         {
             $out .= " backhead";
         }
-        elsif ($arrow{head} eq 'both')
+        elsif ($head eq 'both')
         {
             $out .= " heads";
         }
     }
 
-    push(@{$self->{_arrows}}, $out);
+    return($out);
+}
+
+
+# Arbitrary rectangles placed in the chart
+#
+# Usage example:
+# $chart->rectangle(
+#     from => "screen 0.2, screen 0.2",
+#     to   => "screen 0.4, screen 0.4",
+#     fill => {
+#         density => 0.2,
+#         color   => "#11ff11",
+#     },
+#     border => {color => "blue"},
+# );
+sub rectangle
+{
+    my ($self, %rect) = @_;
+
+    # Position and dimension of the rectangle
+    my $out = "";
+    $out .= " $rect{index}" if (defined $rect{index});
+    $out .= " rectangle";
+
+    if (defined $rect{from})
+    {
+        $out .= " from $rect{from}";
+        
+        if (defined $rect{to})
+        {
+            $out .= " to $rect{to}";
+        }
+        elsif (defined $rect{rto})
+        {
+            $out .= " rto $rect{rto}";
+        }
+        else
+        {
+            confess("Rectangle dimension not complete");
+        }
+    }
+    elsif (defined $rect{width})
+    {
+        $rect{at} = $rect{center} if (defined $rect{center});
+        confess("Rectangle position not complete") if (!defined $rect{at});
+
+        $out .= " at $rect{at} size $rect{width},$rect{height}";
+    }
+    else
+    {
+        confess("Rectangle position or dimension not complete");
+    }
+
+    # Process shared object options
+    $out .= &_setObjOpt(\%rect);
+
+    push(@{$self->{_objects}}, $out);
     return($self);
+}
+
+
+# Arbitrary ellipses placed in the chart
+#
+# Usage example:
+# $chart->ellipse(
+#     at     => "screen 0.2, screen 0.2",
+#     width  => 0.2,
+#     height => 0.5
+#     fill   => {
+#         density => 0.2,
+#         color   => "#11ff11",
+#     },
+#     border => {color => "blue"},
+# );
+sub ellipse
+{
+    my ($self, %elli) = @_;
+
+    my $out = "";
+    $out .= " $elli{index}" if (defined $elli{index});
+    $out .= " ellipse";
+
+    # Position and dimension of the ellipse
+    $elli{at} = $elli{center} if (defined $elli{center});
+    $out .= " at $elli{at} size $elli{width},$elli{height}";
+    $out .= " units $elli{units}" if (defined $elli{units});
+
+    # Process shared object options
+    $out .= &_setObjOpt(\%elli);
+
+    push(@{$self->{_objects}}, $out);
+    return($self);
+}
+
+
+# Arbitrary circles placed in the chart
+#
+# Usage example:
+# $chart->circle(
+#     at   => "screen 0.2, screen 0.2",
+#     size => 0.5
+#     fill => {
+#         density => 0.2,
+#         color   => "#11ff11",
+#     },
+#     border => {color => "blue"},
+# );
+sub circle
+{
+    my ($self, %cir) = @_;
+
+    my $out = "";
+    $out .= " $cir{index}" if (defined $cir{index});
+    $out .= " circle";
+
+    # Position and dimension of the circle
+    $cir{at} = $cir{center} if (defined $cir{center});
+    $out .= " at $cir{at} size $cir{size}";
+
+    if (defined $cir{arc})
+    {
+        (ref($cir{arc}) eq 'ARRAY')?
+            ($out .= " arc [". join(':', @{$cir{arc}}) . "]"):
+            ($out .= " arc [$cir{arc}]");
+    }
+
+    # Process shared object options
+    $out .= &_setObjOpt(\%cir);
+
+    push(@{$self->{_objects}}, $out);
+    return($self);
+}
+
+
+# Set the details common to all objects
+sub _setObjOpt
+{
+    my ($obj) = @_;
+    my $out = "";
+    $out .= " $$obj{layer}" if (defined $$obj{layer});
+    $out .= " linewidth $$obj{linewidth}" if (defined $$obj{linewidth});
+
+    # Set filling color / pattern and border
+    if (defined $$obj{fill})
+    {
+        my $fill = $$obj{fill};
+        $out .= " fillcolor rgb \"$$fill{color}\"" if (defined $$fill{color});
+        $out .= " fillstyle". &_fillStyle($fill);
+
+        # Set details of the border
+        if (defined $$obj{border})
+        {
+            if (ref($$obj{border}) eq 'HASH')
+            {
+                $out .= " border";
+                $out .= " linecolor rgb \"$$obj{border}{color}\"" if
+                    (defined $$obj{border}{color});
+            }
+            elsif ($$obj{border} =~ /^(off|no)$/)
+            {
+                $out .= " noborder";
+            }
+        }
+    }
+    elsif (defined $$obj{border})
+    {
+        if (ref($$obj{border}) eq 'HASH')
+        {
+            $out .= " fillstyle border";
+            $out .= " linecolor rgb \"$$obj{border}{color}\"" if
+                (defined $$obj{border}{color});
+        }
+        elsif ($$obj{border} =~ /^(off|no)$/)
+        {
+            $out .= " noborder";
+        }
+    }
+    return($out);
 }
 
 
@@ -1243,7 +1478,7 @@ sub convert
     # Rotate 90 deg for landscape image
     if (defined $self->{orient} && $self->{orient} eq 'portrait')
     {
-		my $cmd = qq("$convert" $temp $temp.$imgfmt 2>&1);
+        my $cmd = qq("$convert" $temp $temp.$imgfmt 2>&1);
         my $err = `$cmd`;
         if (defined $err && $err ne '')
         {
@@ -1258,7 +1493,7 @@ sub convert
     }
     else
     {
-		my $cmd = qq("$convert" -rotate 90 $temp $temp.$imgfmt 2>&1);
+        my $cmd = qq("$convert" -rotate 90 $temp $temp.$imgfmt 2>&1);
         my $err = `$cmd`;
         if (defined $err && $err ne '')
         {
@@ -1358,7 +1593,7 @@ sub copy
     foreach my $clone (@clone)
     {
         my $dirTmp = tempdir(CLEANUP => 1);
-        ($^O eq 'MSWin32')? ($dirTmp .= '\\'): ($dirTmp .= '/');
+        ($^O =~ /MSWin/)? ($dirTmp .= '\\'): ($dirTmp .= '/');
         $clone->{_script} = $dirTmp . "plot";
     }
     return($clone[0]) if (!defined $num);
@@ -1371,7 +1606,7 @@ package Chart::Gnuplot::DataSet;
 use strict;
 use Carp;
 use File::Temp qw(tempdir);
-use Chart::Gnuplot::Util qw(_lineType _pointType _copy);
+use Chart::Gnuplot::Util qw(_lineType _pointType _fillStyle _copy);
 
 # Constructor
 sub new
@@ -1379,7 +1614,7 @@ sub new
     my ($class, %hash) = @_;
 
     my $dirTmp = tempdir(CLEANUP => 1);
-    ($^O eq 'MSWin32')? ($dirTmp .= '\\'): ($dirTmp .= '/');
+    ($^O =~ /MSWin/)? ($dirTmp .= '\\'): ($dirTmp .= '/');
     $hash{_data} = $dirTmp . "data";
 
     my $self = \%hash;
@@ -1857,10 +2092,10 @@ sub _thaw
             $string = "$self->{func}";
         }
     }
-	else
-	{
-		croak("Unknown or undefined data source");
-	}
+    else
+    {
+        croak("Unknown or undefined data source");
+    }
 
     # Process the Gnuplot "using" feature
     $using = $self->{using} if (defined $self->{using});
@@ -1881,26 +2116,28 @@ sub _thaw
     $string .= " pointtype ".&_pointType($self->{pointtype}) if
         (defined $self->{pointtype});
     $string .= " pointsize $self->{pointsize}" if (defined $self->{pointsize});
-    $string .= " fill".&_fillStyle($self->{fill}) if (defined $self->{fill});
-    return($string);
-}
-
-
-# Generate box filling style string
-# - called by _thaw()
-sub _fillStyle
-{
-    my ($fill) = @_;
-
-    if (ref($fill) eq 'HASH')
+    
+    # Filling style of the curve
+    if (defined $self->{fill})
     {
-        my $style = " solid $$fill{density}";
-        $style .= " noborder" if (defined $$fill{border} &&
-            $$fill{border} =~ /^(off|no)$/);
-        return($style);
-    }
+        $string .= " fill".&_fillStyle($self->{fill});
 
-    return(" solid $fill");
+        # Set details of the border
+        if (defined $self->{border})
+        {
+            if (ref($self->{border}) eq 'HASH')
+            {
+                $string .= " border";
+                $string .= " linecolor rgb \"$self->{border}{color}\"" if
+                    (defined $self->{border}{color});
+            }
+            elsif ($self->{border} =~ /^(off|no)$/)
+            {
+                $string .= " noborder";
+            }
+        }
+    }
+    return($string);
 }
 
 
@@ -1913,11 +2150,131 @@ sub copy
     foreach my $clone (@clone)
     {
         my $dirTmp = tempdir(CLEANUP => 1);
-        ($^O eq 'MSWin32')? ($dirTmp .= '\\'): ($dirTmp .= '/');
+        ($^O =~ /MSWin/)? ($dirTmp .= '\\'): ($dirTmp .= '/');
         $clone->{_data} = $dirTmp . "data";
     }
     return($clone[0]) if (!defined $num);
     return(@clone);
+}
+
+
+# Curve fitting method
+#
+# NOTICE: This feature is experimental and in alpha phase.
+#
+# Usage example:
+# my $dataSet = Chart::Gnuplot::DataSet->new(...);
+#
+# my $dataFit = $dataSet->fit(
+#    func => "a*x + b",                # linear fit
+#    vars => 'x',
+#    params => {a => -1, b => 0.5},    # seed
+# );
+#
+# print "a = $dataFit->{params}->{a}\n";
+# print "b = $dataFit->{params}->{b}\n";
+#
+# # Plot the raw data set and fitted curve
+# $chart->plot2d($dataSet, $dataFit);
+sub fit
+{
+    my ($self, %hash) = @_;
+    my $script = my $data = my $result = my $log = $self->{_data};
+    my $styleTmp = (defined $self->{style})? $self->{style} : 'lines';
+
+    # Filename of the temp files
+    $script =~ s/\/data$/\/fit\.script/;
+    $result =~ s/\/data$/\/fit\.result/;
+    $log =~ s/\/data$/\/fit\.log/;
+
+    # Prepare parameter and error string for printing
+    my $paraString = my $paraList = my $errList = '';
+    my @params = ();
+    my $paraRef = ref($hash{params});
+    if ($paraRef eq 'HASH')
+    {
+        @params = keys %{$hash{params}};
+        my @err = ();
+        my $parFile = $self->{_data};
+        $parFile =~ s/\/data$/\/par\.dat/;
+        open(PARA, ">$parFile") || confess "Can't write parameter to $parFile";
+        foreach my $pTmp (@params)
+        {
+            my $vTmp = (defined ${$hash{params}}{$pTmp})?
+                ${$hash{params}}{$pTmp} : 1.0;
+            print PARA "$pTmp = $vTmp\n";
+            push(@err, $pTmp . "_err");
+        }
+        close(PARA);
+        $paraString = "\"$parFile\"";
+        $paraList = join(',', @params);
+        $errList = join(',', @err);
+    }
+    elsif ($paraRef eq 'ARRAY')
+    {
+        @params = @{$hash{params}};
+        my @err = map {$_ . '_err'} @params;
+        $paraString = $paraList = join(',', @params);
+        $errList = join(',', @err);
+    }
+    else
+    {
+        @params = split(/,\s*/, $hash{params});
+        my @err = map {$_ . '_err'} @params;
+        $paraString = $paraList = $hash{params};
+        $errList = join(',', @err);
+    }
+
+    if (!defined $hash{using})
+    {
+        my @col = split(/\s*,\s*/, $hash{vars});
+        my $numCol = scalar(@col) + 1;
+        if (ref($self->{ydata}->[0]) eq 'ARRAY')
+        {
+            $numCol++;
+            $self->{style} = 'yerror';    # temp style for data file generation
+        }
+        $hash{using} = join(':', (1 .. $numCol));
+    }
+    $self->_thaw() if (!-e $data);    # generate data file
+    $self->{style} = $styleTmp;
+
+    # Generate gnuplot script for curve fitting
+    open(FIT, ">$script") || confess("Can't generate script to $script");
+    print FIT "set fit logfile \"$log\" errorvariables\n";
+    print FIT "set print \"$result\"\n";
+    print FIT "fit $hash{func} \"$data\" using $hash{using}".
+        " via $paraString\n";
+    print FIT "print $paraList\n";
+    print FIT "print $errList\n";
+    close(FIT);
+
+    # Call gnuplot
+    system("gnuplot $script >& /dev/null");
+
+    # Read and parse the result file
+    open(RES, $result) || confess("Can't read fitting result $result");
+    chomp(my ($pLine, $eLine) = <RES>);
+    close(RES);
+
+    # Save the result in DataSet object
+    my %param;
+    my @pVal = split(/\s+/, $pLine);
+    my @eVal = split(/\s+/, $eLine);
+    my $fitted = '';
+    for (my $i = 0; $i < @pVal; $i++)
+    {
+        $param{$params[$i]} = $pVal[$i];
+        $param{$params[$i]."_err"} = $eVal[$i];
+        $fitted .= "$params[$i] = $pVal[$i],";
+    }
+
+    $fitted .= $hash{func};
+    my $outDS = Chart::Gnuplot::DataSet->new(
+        func   => $fitted,
+        params => \%param,
+    );
+    return($outDS);
 }
 
 
@@ -2447,13 +2804,58 @@ Add an arbitrary text label. e.g.,
 Draw arbitrary arrow. e.g.,
 
     $chart->arrow(
-        from      => "0,2",
-        to        => "0.3,0.1",
-        linetype  => 'dash',
-        width     => 2,
-        color     => "dark-blue",
-        headsize  => 3,
-        head      => 'both',
+        from     => "0,2",
+        to       => "0.3,0.1",
+        linetype => 'dash',
+        width    => 2,
+        color    => "dark-blue",
+        head     => {
+            size  => 2,
+            angle => 30,
+        },
+    );
+
+=head3 rectangle
+
+Draw arbitrary rectangle. e.g.,
+
+    $chart->rectangle(
+        from => "screen 0.2, screen 0.2",
+        to   => "screen 0.4, screen 0.4",
+        fill => {
+            density => 0.2,
+            color   => "#11ff11",
+        },
+        border => {color => "blue"},
+    );
+
+=head3 ellipse
+
+Draw arbitrary ellipse. e.g.,
+
+    $chart->ellipse(
+        at     => "screen 0.2, screen 0.2",
+        width  => 0.2,
+        height => 0.5
+        fill   => {
+            density => 0.2,
+            color   => "#11ff11",
+        },
+        border => {color => "blue"},
+    );
+
+=head3 circle
+
+Draw arbitrary circle. e.g.,
+
+    $chart->circle(
+        at   => "screen 0.2, screen 0.2",
+        size => 0.5
+        fill => {
+            density => 0.2,
+            color   => "#11ff11",
+        },
+        border => {color => "blue"},
     );
 
 =head3 copy
@@ -2948,7 +3350,7 @@ Ka-Wai Mak <kwmak@cpan.org>
 
 =head1 COPYRIGHT
 
-Copyright (c) 2008-2011 Ka-Wai Mak. All rights reserved.
+Copyright (c) 2008-2011, 2013 Ka-Wai Mak. All rights reserved.
 
 =head1 LICENSE
 

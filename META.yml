@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Chart-Gnuplot
-version:            0.18
+version:            0.19
 abstract:           Plot graph using Gnuplot in Perl on the fly
 author:
     - Ka-Wai Mak

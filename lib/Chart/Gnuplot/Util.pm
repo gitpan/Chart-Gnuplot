@@ -4,7 +4,7 @@ use vars qw(@ISA @EXPORT_OK);
 use Exporter;
 
 @ISA = qw(Exporter);
-@EXPORT_OK = qw(_lineType _pointType _borderCode _copy);
+@EXPORT_OK = qw(_lineType _pointType _borderCode _fillStyle _copy);
 
 # Convert named line type to indexed line type of gnuplot
 #
@@ -94,6 +94,26 @@ sub _borderCode
     $code += 1024 if ($side =~ /(^|,)\s*(1024|top left front)\s*(,|$)/);
     $code += 2048 if ($side =~ /(^|,)\s*(2048|top right front)\s*(,|$)/);
     return($code);
+}
+
+
+# Generate box filling style string
+# - called by _thaw() and _setObjOpt()
+sub _fillStyle
+{
+    my ($fill) = @_;
+
+    if (ref($fill) eq 'HASH')
+    {
+		my $style = "";
+        $style .= " solid $$fill{density}" if (defined $$fill{density});
+        $style .= " pattern $$fill{pattern}" if (defined $$fill{pattern});
+        $style .= " noborder" if (defined $$fill{border} &&
+            $$fill{border} =~ /^(off|no)$/);
+        return($style);
+    }
+
+    return(" $fill");
 }
 
 
