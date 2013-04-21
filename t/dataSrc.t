@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 use strict;
-use Test::More (tests => 4);
+use Test::More (tests => 6);
 
 BEGIN {use Chart::Gnuplot;}
 
@@ -61,7 +61,47 @@ BEGIN {use Chart::Gnuplot;}
     );
 
     my $string = $d->_thaw();
-    ok($string eq "sin(x) title \"\"");
+    ok($string eq 'sin(x) title ""');
+}
+
+
+# Test plotting 2D parametric function
+{
+    my $c = Chart::Gnuplot->new(
+        output => "temp.ps",
+    );
+    my $d = Chart::Gnuplot::DataSet->new(
+        func => {
+            x => 'sin(t)',
+            y => 'cos(t)',
+        },
+    );
+
+    $c->_setChart([$d]);
+    my $s = $d->_thaw();
+    ok($s eq 'sin(t),cos(t) title ""' && defined $c->{parametric});
+}
+
+
+# Test plotting 3D parametric function
+{
+    my $c = Chart::Gnuplot->new(
+        output => "temp.ps",
+    );
+
+    # A torus
+    my $d = Chart::Gnuplot::DataSet->new(
+        func => {
+            x => 'cos(u)*(4+cos(v))',
+            y => 'sin(u)*(4+cos(v))',
+            z => 'sin(v)',
+        },
+    );
+
+    $c->_setChart([$d]);
+    my $s = $d->_thaw();
+    ok($s eq 'cos(u)*(4+cos(v)),sin(u)*(4+cos(v)),sin(v) title ""' &&
+        defined $c->{parametric});
 }
 
 ###################################################################

@@ -3,17 +3,14 @@ use strict;
 use Chart::Gnuplot;
 
 # Input data source
-my @points = (
-    [1, 1, 1.5],
-    [1, 2, 1.8],
-    [1, 3, 1.5],
-    [2, 1, 1.8],
-    [2, 2, 2],
-    [2, 3, 1.8],
-    [3, 1, 1.5],
-    [3, 2, 1.8],
-    [3, 3, 1.5],
-);
+my @points = ();
+for (my $x = -5; $x < 5; $x += 0.02)
+{
+	my $y = sin($x*3);
+	my $z = cos($x*3);
+
+	push(@points, [$x, $y, $z]);
+}
 
 my $chart = Chart::Gnuplot->new(
     output => "gallery/plot3d_2.png",

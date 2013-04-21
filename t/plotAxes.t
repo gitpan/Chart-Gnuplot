@@ -6,29 +6,23 @@ BEGIN {use Chart::Gnuplot;}
 
 my $temp = "temp.ps";
 
-# Test formatting the axis tics
+# Test default setting of the time stamp
 {
     my $c = Chart::Gnuplot->new(
         output => $temp,
-        xtics  => {
-            labelfmt  => '%.1g',
-            font      => 'arial,18',
-            fontcolor => 'magenta',
-        },
-        ytics  => {
-            labels => [-0.8, 0.3, 0.6], # specify tic labels
-            rotate => '30',
-            mirror => 'off',            # no tic on y2 axis
-        },
-        x2tics => [-8, -6, -2, 2, 5, 9],
-        y2tics => {
-            length => "4,2",            # tic size
-            minor  => 4,                # 2 minor tics between major tics
-        },
+        x2tics => 'on',
+		y2tics => 'on',
     );
 
-    $c->_setChart();
-    ok(&diff($c->{_script}, "axisTics_1.gp") == 0);
+	my $d = Chart::Gnuplot::DataSet->new(
+		func => 'sin(x)',
+		axes => 'x2y2',
+	);
+
+    $c->_setChart([$d]);
+	my $s = $d->_thaw($c);
+    ok( &diff($c->{_script}, "plotAxes_1.gp") == 0 &&
+		$s eq 'sin(x) title "" axes x2y2' );
 }
 
 ###################################################################

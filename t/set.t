@@ -6,29 +6,20 @@ BEGIN {use Chart::Gnuplot;}
 
 my $temp = "temp.ps";
 
-# Test formatting the axis tics
+# Test the "set" method
 {
     my $c = Chart::Gnuplot->new(
         output => $temp,
-        xtics  => {
-            labelfmt  => '%.1g',
-            font      => 'arial,18',
-            fontcolor => 'magenta',
-        },
-        ytics  => {
-            labels => [-0.8, 0.3, 0.6], # specify tic labels
-            rotate => '30',
-            mirror => 'off',            # no tic on y2 axis
-        },
-        x2tics => [-8, -6, -2, 2, 5, 9],
-        y2tics => {
-            length => "4,2",            # tic size
-            minor  => 4,                # 2 minor tics between major tics
-        },
+    );
+
+    $c->set(
+        origin  => "0.1, 0.5",
+        tmargin => 10,
+        lmargin => 5,
     );
 
     $c->_setChart();
-    ok(&diff($c->{_script}, "axisTics_1.gp") == 0);
+    ok(&diff($c->{_script}, "set_1.gp") == 0);
 }
 
 ###################################################################

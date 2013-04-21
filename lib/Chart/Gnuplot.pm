@@ -5,7 +5,7 @@ use Carp;
 use File::Copy qw(move);
 use File::Temp qw(tempdir);
 use Chart::Gnuplot::Util qw(_lineType _pointType _borderCode _fillStyle _copy);
-$VERSION = '0.19';
+$VERSION = '0.20';
 
 # Constructor
 sub new
@@ -106,7 +106,7 @@ sub plot2d
     close(GPH);
 
     # Generate image file
-    &_execute($self);
+    &execute($self);
     return($self);
 }
 
@@ -128,7 +128,7 @@ sub plot3d
     close(GPH);
 
     # Generate image file
-    &_execute($self);
+    &execute($self);
     return($self);
 }
 
@@ -223,7 +223,7 @@ sub multiplot
     close(PLT);
 
     # Generate image file
-    &_execute($self);
+    &execute($self);
     return($self);
 }
 
@@ -234,7 +234,9 @@ sub command
     my ($self, $cmd) = @_;
 
     open(PLT, ">>$self->{_script}") || confess("Can't write $self->{_script}");
-    print PLT "$cmd\n";
+    (ref($cmd) eq 'ARRAY')?
+        (print PLT join("\n", @$cmd), "\n"):
+        (print PLT "$cmd\n");
     close(PLT);
     return($self);
 }
@@ -966,8 +968,8 @@ sub _setTimestamp
 }
 
 
-# Generate the image file
-sub _execute
+# Call Gnuplot to generate the image file
+sub execute
 {
     my ($self) = @_;
 
@@ -1018,6 +1020,8 @@ sub _execute
         my $ext = $a[-1];
         &convert($self, $ext) if ($ext !~ /^e?ps$/);
     }
+
+    return($self);
 }
 
 
@@ -1079,10 +1083,10 @@ sub label
         defined $label{pointcolor})
     {
         $out .= " point";
-        $out .= " pt ".&_pointType($label{pointtype}) if
+        $out .= " pointtype ".&_pointType($label{pointtype}) if
             (defined $label{pointtype});
-        $out .= " ps $label{pointsize}" if (defined $label{pointsize});
-        $out .= " lc rgb \"$label{pointcolor}\"" if
+        $out .= " pointsize $label{pointsize}" if (defined $label{pointsize});
+        $out .= " linecolor rgb \"$label{pointcolor}\"" if
             (defined $label{pointcolor});
     }
 
@@ -1131,13 +1135,44 @@ sub arrow
 }
 
 
+# Arbitrary lines placed in the chart
+#
+# Usage example:
+# $chart->line(
+#     from     => "0,2",
+#     to       => "0.3,0.1",
+#     linetype => 'dash',
+#     width    => 2,
+#     color    => "dark-blue",
+# );
+#
+# TODO:
+# - support layer <front/back>
+sub line
+{
+    my ($self, %line) = @_;
+    confess("Starting position of line not found") if (!defined $line{from});
+
+    my $out = " from $line{from}";
+    $out .= " to $line{to}" if (defined $line{to});
+    $out .= " rto $line{rto}" if (defined $line{rto});
+    $out .= " linetype ".&_lineType($line{linetype}) if
+        (defined $line{linetype});
+    $out .= " linewidth $line{width}" if (defined $line{width});
+    $out .= " linecolor rgb \"$line{color}\"" if (defined $line{color});
+
+    push(@{$self->{_arrows}}, "$out nohead");    # remove arrow head
+    return($self);
+}
+
+
 # Set the options of arrow head
 sub _setArrowHead
 {
     my ($head) = @_;
     my $out = '';
 
-    # Personal comments:
+    # Author's comments:
     # - The filling of arrow head does not follow the convention of fill style
     #   of objects and plotting styles. Perhaps Gnuplot will change this in the
     #   future.
@@ -1232,6 +1267,8 @@ sub rectangle
     {
         $rect{at} = $rect{center} if (defined $rect{center});
         confess("Rectangle position not complete") if (!defined $rect{at});
+        confess("Rectangle dimension not found") if (!defined $rect{width} ||
+            !defined $rect{height});
 
         $out .= " at $rect{at} size $rect{width},$rect{height}";
     }
@@ -1265,13 +1302,16 @@ sub ellipse
 {
     my ($self, %elli) = @_;
 
+    # - Alias of "at": "center"
+    # - Check position and dimension information
+    $elli{at} = $elli{center} if (defined $elli{center});
+    confess("Ellipse location not found") if (!defined $elli{at});
+    confess("Ellipse dimension not found") if (!defined $elli{width} ||
+        !defined $elli{height});
+
     my $out = "";
     $out .= " $elli{index}" if (defined $elli{index});
-    $out .= " ellipse";
-
-    # Position and dimension of the ellipse
-    $elli{at} = $elli{center} if (defined $elli{center});
-    $out .= " at $elli{at} size $elli{width},$elli{height}";
+    $out .= " ellipse at $elli{at} size $elli{width},$elli{height}";
     $out .= " units $elli{units}" if (defined $elli{units});
 
     # Process shared object options
@@ -1298,13 +1338,15 @@ sub circle
 {
     my ($self, %cir) = @_;
 
+    # - Alias of "at": "center"
+    # - Check position and size information
+    $cir{at} = $cir{center} if (defined $cir{center});
+    confess("Circle location not found") if (!defined $cir{at});
+    confess("Circle size not found") if (!defined $cir{size});
+
     my $out = "";
     $out .= " $cir{index}" if (defined $cir{index});
-    $out .= " circle";
-
-    # Position and dimension of the circle
-    $cir{at} = $cir{center} if (defined $cir{center});
-    $out .= " at $cir{at} size $cir{size}";
+    $out .= " circle at $cir{at} size $cir{size}";
 
     if (defined $cir{arc})
     {
@@ -1315,6 +1357,51 @@ sub circle
 
     # Process shared object options
     $out .= &_setObjOpt(\%cir);
+
+    push(@{$self->{_objects}}, $out);
+    return($self);
+}
+
+
+# Arbitrary polygons placed in the chart
+#
+# Usage example:
+# $chart->polygon(
+#     vertices => [
+#         "0, -0.6",
+#         {rto => "-1, 0.3"},
+#         {to => [-4, 0.4]},
+#     ],
+# );
+sub polygon
+{
+    my ($self, %poly) = @_;
+    confess("Polygon vertices not found") if (!defined $poly{vertices});
+
+    my $v = $poly{vertices};
+    confess("Polygon starting vertex not found") if (scalar(@$v) < 0.5);
+
+    my $out = "";
+    $out .= " $poly{index}" if (defined $poly{index});
+    $out .= " polygon from $$v[0]";
+
+    # Other vertices
+    for (my $i = 1; $i < @$v; $i++)
+    {
+        if (ref($$v[$i]) eq 'HASH')
+        {
+            my @key = keys(%{$$v[$i]});
+            my @val = values(%{$$v[$i]});
+            $out .= " $key[0] $val[0]";
+        }
+        else
+        {
+            $out .= " to $$v[$i]";
+        }
+    }
+
+    # Process shared object options
+    $out .= &_setObjOpt(\%poly);
 
     push(@{$self->{_objects}}, $out);
     return($self);
@@ -1388,6 +1475,14 @@ sub test
     my $gnuplot = 'gnuplot';
     $gnuplot = $self->{gnuplot} if (defined $self->{gnuplot});
     system("$gnuplot $pltTmp");
+
+    # Convert the image to the user-specified format
+    if (defined $self->{_terminal} && $self->{_terminal} eq 'auto')
+    {
+        my @a = split(/\./, $self->{output});
+        my $ext = $a[-1];
+        &convert($self, $ext) if ($ext !~ /^e?ps$/);
+    }
     return($self);
 }
 
@@ -1449,7 +1544,7 @@ sub animate
     }
 
     # Generate image file
-    &_execute($self);
+    &execute($self);
     return($self);
 }
 
@@ -1718,14 +1813,30 @@ sub func
 }
 
 
+# Copy method of the data set object
+sub copy
+{
+    my ($self, $num) = @_;
+    my @clone = &_copy(@_);
 
-# Thaw the data set object to string
+    foreach my $clone (@clone)
+    {
+        my $dirTmp = tempdir(CLEANUP => 1);
+        ($^O =~ /MSWin/)? ($dirTmp .= '\\'): ($dirTmp .= '/');
+        $clone->{_data} = $dirTmp . "data";
+    }
+    return($clone[0]) if (!defined $num);
+    return(@clone);
+}
+
+
+# Thaw the data set object
 # - call _fillStyle()
+# _ call different _thaw*()
 #
 # TODO:
 # - data file delimiter
 # - data labels
-# - zdata
 sub _thaw
 {
     my ($self, $chart) = @_;
@@ -1736,62 +1847,22 @@ sub _thaw
     # - in any case, ydata need to be defined
     if (defined $self->{ydata})
     {
-        my $ydata = $self->{ydata};
         my $fileTmp = $self->{_data};
-        open(DATA, ">$fileTmp") || confess("Can't write data to temp file");
+        $string = "'$fileTmp'";
 
         # Process 3D data set
         # - zdata is defined
         if (defined $self->{zdata})
         {
-            my $zdata = $self->{zdata};
-            my $xdata = $self->{xdata};
-            croak("x-data and y-data have unequal length") if
-                (scalar(@$ydata) ne scalar(@$xdata));
-            croak("y-data and z-data have unequal length") if
-                (scalar(@$ydata) ne scalar(@$zdata));
-            for (my $i = 0; $i < @$xdata; $i++)
-            {
-                print DATA "\n" if ($i > 0 && $$xdata[$i] != $$xdata[$i-1]);
-                print DATA "$$xdata[$i] $$ydata[$i] $$zdata[$i]\n";
-            }
-            $string = "'$fileTmp'";
-
-            # Construst using statement for date-time data
-            if (defined $self->{timefmt})
-            {
-                my @a = split(/\s+/, $$xdata[0]);
-                my $yCol = scalar(@a) + 1;
-                $using = "1:$yCol";
-
-                my @b = split(/\s+/, $$ydata[0]);
-                my $zCol = scalar(@b) + $yCol;
-                $using .= ":$zCol";
-            }
+            $using = (ref($self->{xdata}->[0]) eq 'ARRAY')?
+                &_thawXYZGrid($self) : &_thawXYZ($self);
         }
         # Treatment for financebars and candlesticks styles
         # - Both xdata and ydata are defined
         elsif (defined $self->{xdata} && defined $self->{style} &&
             $self->{style} =~ /^(financebars|candlesticks)$/)
         {
-            my $xdata = $self->{xdata};
-            croak("x-data and y-data have unequal length") if
-                (scalar(@{$$ydata[0]}) ne scalar(@$xdata));
-
-            for (my $i = 0; $i < @$xdata; $i++)
-            {
-                print DATA "$$xdata[$i] $$ydata[0][$i] $$ydata[1][$i] ".
-                    "$$ydata[2][$i] $$ydata[3][$i]\n";
-            }
-            $string = "'$fileTmp'";
-
-            # Construst using statement for date-time data
-            if (defined $self->{timefmt})
-            {
-                my @a = split(/\s+/, $$xdata[0]);
-                my $yCol = scalar(@a) + 1;
-                $using = "1:".join(':', ($yCol .. $yCol+3));
-            }
+            $using = &_thawXYFinance($self);
         }
         # Treatment for errorbars and errorlines styles
         # - Both xdata and ydata are defined
@@ -1799,87 +1870,20 @@ sub _thaw
         elsif (defined $self->{xdata} && defined $self->{style} &&
             $self->{style} =~ /error/)
         {
-            my $xdata = $self->{xdata};
-
             # Error bars along x-axis
             if ($self->{style} =~ /^xerror/)
             {
-                croak("x-data and y-data have unequal length") if
-                    (scalar(@{$$xdata[0]}) ne scalar(@$ydata));
-
-                for (my $i = 0; $i < @$ydata; $i++)
-                {
-                    print DATA "$$xdata[0][$i] $$ydata[$i]";
-                    for(my $j = 1; $j < @$xdata; $j++)
-                    {
-                        print DATA " $$xdata[$j][$i]";
-                    }
-                    print DATA "\n";
-                }
+                $using = &_thawXYXError($self);
             }
             # Error bars along y-axis
             elsif ($self->{style} =~ /^(y|box)error/)
             {
-                croak("x-data and y-data have unequal length") if
-                    (scalar(@{$$ydata[0]}) ne scalar(@$xdata));
-
-                for (my $i = 0; $i < @$xdata; $i++)
-                {
-                    print DATA "$$xdata[$i] $$ydata[0][$i]";
-                    for(my $j = 1; $j < @$ydata; $j++)
-                    {
-                        print DATA " $$ydata[$j][$i]";
-                    }
-                    print DATA "\n";
-                }
+                $using = &_thawXYYError($self);
             }
             # Error bars along both x and y-axis
             elsif ($self->{style} =~ /^(box)?xyerror/)
             {
-                if (scalar(@$xdata) == scalar(@$ydata))
-                {
-                    for (my $i = 0; $i < @{$$xdata[0]}; $i++)
-                    {
-                        print DATA "$$xdata[0][$i] $$ydata[0][$i]";
-                        for(my $j = 1; $j < @$ydata; $j++)
-                        {
-                            print DATA " $$xdata[$j][$i] $$ydata[$j][$i]";
-                        }
-                        print DATA "\n";
-                    }
-                }
-                else
-                {
-                    for (my $i = 0; $i < @{$$xdata[0]}; $i++)
-                    {
-                        print DATA "$$xdata[0][$i] $$ydata[0][$i]";
-                        if (scalar(@$xdata) == 2)
-                        {
-                            my $ltmp = $$xdata[0][$i] - $$xdata[1][$i]*0.5;
-                            my $htmp = $$xdata[0][$i] + $$xdata[1][$i]*0.5;
-                            print DATA " $ltmp $htmp ".
-                                "$$ydata[1][$i] $$ydata[2][$i]\n";
-                        }
-                        else
-                        {
-                            my $ltmp = $$ydata[0][$i] - $$ydata[1][$i]*0.5;
-                            my $htmp = $$ydata[0][$i] - $$ydata[1][$i]*0.5;
-                            print DATA " $$xdata[1][$i] $$xdata[2][$i] ".
-                                "$ltmp $htmp\n";
-                        }
-                    }
-                }
-            }
-            $string = "'$fileTmp'";
-            
-            # Construst using statement for date-time data
-            if (defined $self->{timefmt})
-            {
-                my ($xTmp) = (ref($$xdata[0]) eq 'ARRAY')? ($$xdata[0][0]):
-                    ($$xdata[0]);
-                my @a = split(/\s+/, $xTmp);
-                my $yCol = scalar(@a) + 1;
-                $using = "1:$yCol";
+                $using = &_thawXYXYError($self);
             }
         }
         # Treatment for hbars
@@ -1887,181 +1891,80 @@ sub _thaw
         elsif (defined $self->{xdata} && defined $self->{style} &&
             $self->{style} eq 'hbars')
         {
-            my $xdata = $self->{xdata};
-            my $ylow = my $yhigh = $$ydata[0];
-            if (scalar(@$ydata) > 1)
-            {
-                $ylow = 0.5*(3*$$ydata[0]-$$ydata[1]);
-                $yhigh = 0.5*(3*$$ydata[-1]-$$ydata[-2]);
-            }
-
-            for (my $i = 0; $i < @$xdata; $i++)
-            {
-                $ylow = 0.5*($$ydata[$i]+$$ydata[$i-1]) if ($i > 0);
-                $yhigh = 0.5*($$ydata[$i]+$$ydata[$i+1]) if ($i < $#$ydata);
-                print DATA "0 $$ydata[$i] 0 $$xdata[$i] $ylow $yhigh\n";
-            }
-            $self->{style} = "boxxyerrorbars";
-            $string = "'$fileTmp'";
+            &_thawXYHbars($self);
         }
         # Treatment for hlines
         # - use "boxxyerrorbars" style to mimic
         elsif (defined $self->{xdata} && defined $self->{style} &&
             $self->{style} eq 'hlines')
         {
-            my $xdata = $self->{xdata};
-            for (my $i = 0; $i < @$xdata; $i++)
-            {
-                print DATA "0 $$ydata[$i] 0 $$xdata[$i] $$ydata[$i] ".
-                    "$$ydata[$i]\n";
-            }
-            $self->{style} = "boxxyerrorbars";
-            $string = "'$fileTmp'";
+            &_thawXYHlines($self);
+        }
+        elsif (defined $self->{xdata} && defined $self->{style} &&
+            $self->{style} eq 'histograms')
+        {
+            $using = &_thawXYHistograms($self);
         }
         # Normal x-y plot
         # - Both xdata and ydata are defined
         elsif (defined $self->{xdata})
         {
-            my $xdata = $self->{xdata};
-            croak("x-data and y-data have unequal length") if
-                (scalar(@$ydata) ne scalar(@$xdata));
-            for (my $i = 0; $i < @$xdata; $i++)
-            {
-                print DATA "$$xdata[$i] $$ydata[$i]\n";
-            }
-            $string = "'$fileTmp'";
-
-            # Construst using statement for date-time data
-            if (defined $self->{timefmt})
-            {
-                my @a = split(/\s+/, $$xdata[0]);
-                my $yCol = scalar(@a) + 1;
-                $using = "1:$yCol";
-            }
+            $using = &_thawXY($self);
         }
         # Only ydata is defined
+        # - Plot ydata against index
         else
         {
             # Treatment for financebars and candlesticks styles
             if (defined $self->{style} &&
                 $self->{style} =~ /^(financebars|candlesticks)$/)
             {
-                for (my $i = 0; $i < @{$$ydata[0]}; $i++)
-                {
-                    print DATA "$i $$ydata[0][$i] $$ydata[1][$i] ".
-                        "$$ydata[2][$i] $$ydata[3][$i]\n";
-                }
+                &_thawYFinance($self);
             }
             # Treatment for errorbars and errorlines styles
             # - Style is defined and contain "error"
             elsif (defined $self->{style} && $self->{style} =~ /^yerror/)
             {
-                for (my $i = 0; $i < @{$$ydata[0]}; $i++)
-                {
-                    print DATA "$i $$ydata[0][$i]";
-                    for(my $j = 1; $j < @$ydata; $j++)
-                    {
-                        print DATA " $$ydata[$j][$i]";
-                    }
-                    print DATA "\n";
-                }
+                &_thawYError($self);
             }
-            # ydata vs index
+            # Other plotting styles
             else
             {
-                for (my $i = 0; $i < @$ydata; $i++)
-                {
-                    print DATA "$i $$ydata[$i]\n";
-                }
+                &_thawY($self);
             }
-            $string = "'$fileTmp'";
-            if (defined $self->{timefmt})
-            {
-                $using = "1:2";
-            }
+            $using = "1:2" if (defined $self->{timefmt});
         }
-
-        close(DATA);
     }
     # Data in points
     elsif (defined $self->{points})
     {
         my $pt = $self->{points};
         my $fileTmp = $self->{_data};
-        open(DATA, ">$fileTmp") || confess("Can't write data to temp file");
+        $string = "'$fileTmp'";
 
-        # 2D data points
-        if (scalar(@{$$pt[0]}) == 2 ||
-            (defined $self->{style} && $self->{style} =~ /error/))
+        # Horizontal lines plotting style
+        if (defined $self->{style} && $self->{style} eq 'hlines')
         {
-            # hlines plotting style
-            if (defined $self->{style} && $self->{style} eq 'hlines')
-            {
-                for(my $i = 0; $i < @$pt; $i++)
-                {
-                    print DATA "0 $$pt[$i][1] 0 $$pt[$i][0] $$pt[$i][1] ".
-                        "$$pt[$i][1]\n";
-                }
-                $self->{style} = "boxxyerrorbars";
-            }
-            # hbars plotting style
-            elsif (defined $self->{style} && $self->{style} eq 'hbars')
-            {
-                my $ylow = my $yhigh = $$pt[0][1];
-                if (scalar(@$pt) > 1)
-                {
-                    $ylow = 0.5*(3*$$pt[0][1]-$$pt[1][1]);
-                    $yhigh = 0.5*(3*$$pt[-1][1]-$$pt[-2][1]);
-                }
-
-                for(my $i = 0; $i < @$pt; $i++)
-                {
-                    $ylow = 0.5*($$pt[$i][1]+$$pt[$i-1][1]) if ($i > 0);
-                    $yhigh = 0.5*($$pt[$i][1]+$$pt[$i+1][1]) if ($i < $#$pt);
-                    print DATA "0 $$pt[$i][1] 0 $$pt[$i][0] $ylow $yhigh\n";
-                }
-                $self->{style} = "boxxyerrorbars";
-            }
-            else
-            {
-                for(my $i = 0; $i < @$pt; $i++)
-                {
-                    print DATA join(" ", @{$$pt[$i]}), "\n";
-                }
-            }
+            &_thawPointsHLines($self);
         }
-        # 3D data points
-        elsif (scalar(@{$$pt[0]}) == 3)
+        # Horizontal bars plotting style
+        elsif (defined $self->{style} && $self->{style} eq 'hbars')
         {
-            my $xLast;
-            for(my $i = 0; $i < @$pt; $i++)
-            {
-                print DATA join(" ", @{$$pt[$i]}), "\n";
-                print DATA "\n" if (defined $xLast && $$pt[$i][0] != $xLast);
-                $xLast = $$pt[$i][0];
-            }
+            &_thawPointsHBars($self);
+        }
+        # Horizontal bars plotting style
+        elsif (defined $self->{style} && $self->{style} eq 'histograms')
+        {
+            $using = &_thawPointsHistograms($self);
+        }
+        # 3D grid data points
+        elsif (ref($$pt[0][0]) eq 'ARRAY')
+        {
+            $using = &_thawPointsGrid($self);
         }
         else
         {
-            for(my $i = 0; $i < @$pt; $i++)
-            {
-                print DATA join(" ", @{$$pt[$i]}), "\n";
-            }
-        }
-        close(DATA);
-        $string = "'$fileTmp'";
-
-        # Construst using statement for date-time data
-        if (defined $self->{timefmt})
-        {
-            my $col = 1;
-            $using = "1";
-            for (my $i = 0; $i < @{$$pt[0]}-1; $i++)
-            {
-                my @a = split(/\s+/, $$pt[0][$i]);
-                $col += scalar(@a);
-                $using .= ":$col";
-            }
+            $using = &_thawPoints($self);
         }
     }
     # File
@@ -2141,20 +2044,601 @@ sub _thaw
 }
 
 
-# Copy method of the data set object
-sub copy
+# Process input data of array of y
+sub _thawY
 {
-    my ($self, $num) = @_;
-    my @clone = &_copy(@_);
+    my ($ds) = @_;
+    my $ydata = $ds->{ydata};
 
-    foreach my $clone (@clone)
+    # Write data into temp file
+    my $fileTmp = $ds->{_data};
+    open(DATA, ">$fileTmp") || confess("Can't write data to temp file");
+    for (my $i = 0; $i < @$ydata; $i++)
     {
-        my $dirTmp = tempdir(CLEANUP => 1);
-        ($^O =~ /MSWin/)? ($dirTmp .= '\\'): ($dirTmp .= '/');
-        $clone->{_data} = $dirTmp . "data";
+        print DATA "$i $$ydata[$i]\n";
     }
-    return($clone[0]) if (!defined $num);
-    return(@clone);
+    close(DATA);
+}
+
+
+# Process input data of array of y for plotting style "yerror..."
+sub _thawYError
+{
+    my ($ds) = @_;
+    my $ydata = $ds->{ydata};
+
+    # Write data into temp file
+    my $fileTmp = $ds->{_data};
+    open(DATA, ">$fileTmp") || confess("Can't write data to temp file");
+    for (my $i = 0; $i < @{$$ydata[0]}; $i++)
+    {
+        print DATA "$i $$ydata[0][$i]";
+        for (my $j = 1; $j < @$ydata; $j++)
+        {
+            print DATA " $$ydata[$j][$i]";
+        }
+        print DATA "\n";
+    }
+    close(DATA);
+}
+
+
+# Process input data of array of y for plotting financial time series
+sub _thawYFinance
+{
+    my ($ds) = @_;
+    my $ydata = $ds->{ydata};
+
+    # Write data into temp file
+    my $fileTmp = $ds->{_data};
+    open(DATA, ">$fileTmp") || confess("Can't write data to temp file");
+    for (my $i = 0; $i < @{$$ydata[0]}; $i++)
+    {
+        print DATA "$i $$ydata[0][$i] $$ydata[1][$i] ".
+            "$$ydata[2][$i] $$ydata[3][$i]\n";
+    }
+    close(DATA);
+}
+
+
+# Process input data of array of x and y
+sub _thawXY
+{
+    my ($ds) = @_;
+
+    my $xdata = $ds->{xdata};
+    my $ydata = $ds->{ydata};
+    croak("x-data and y-data have unequal length") if
+        (scalar(@$ydata) != scalar(@$xdata));
+
+    # Write data into temp file
+    my $fileTmp = $ds->{_data};
+    open(DATA, ">$fileTmp") || confess("Can't write data to temp file");
+    for (my $i = 0; $i < @$xdata; $i++)
+    {
+        print DATA "$$xdata[$i] $$ydata[$i]\n";
+    }
+    close(DATA);
+
+    # Construst using statement for date-time data
+    my $using = '';
+    if (defined $ds->{timefmt})
+    {
+        my @a = split(/\s+/, $$xdata[0]);
+        my $yCol = scalar(@a) + 1;
+        $using = "1:$yCol";
+    }
+    return($using);
+}
+
+
+# Process input data of array of x and y for plotting style "xerror..."
+sub _thawXYXError
+{
+    my ($ds) = @_;
+
+    my $xdata = $ds->{xdata};
+    my $ydata = $ds->{ydata};
+    croak("x-data and y-data have unequal length") if
+        (scalar(@{$$xdata[0]}) != scalar(@$ydata));
+
+    # Write data into temp file
+    my $fileTmp = $ds->{_data};
+    open(DATA, ">$fileTmp") || confess("Can't write data to temp file");
+    for (my $i = 0; $i < @$ydata; $i++)
+    {
+        print DATA "$$xdata[0][$i] $$ydata[$i]";
+        for (my $j = 1; $j < @$xdata; $j++)
+        {
+            print DATA " $$xdata[$j][$i]";
+        }
+        print DATA "\n";
+    }
+    close(DATA);
+
+    # Construst using statement for date-time data
+    my $using = '';
+    if (defined $ds->{timefmt})
+    {
+        my ($xTmp) = (ref($$xdata[0]) eq 'ARRAY')? ($$xdata[0][0]):
+            ($$xdata[0]);
+        my @a = split(/\s+/, $xTmp);
+        my $yCol = scalar(@a) + 1;
+        $using = "1:$yCol";
+    }
+    return($using);
+}
+
+
+# Process input data of array of x and y for plotting style "yerror..."
+sub _thawXYYError
+{
+    my ($ds) = @_;
+
+    my $xdata = $ds->{xdata};
+    my $ydata = $ds->{ydata};
+    croak("x-data and y-data have unequal length") if
+        (scalar(@{$$ydata[0]}) != scalar(@$xdata));
+
+    # Write data into temp file
+    my $fileTmp = $ds->{_data};
+    open(DATA, ">$fileTmp") || confess("Can't write data to temp file");
+    for (my $i = 0; $i < @$xdata; $i++)
+    {
+        print DATA "$$xdata[$i] $$ydata[0][$i]";
+        for (my $j = 1; $j < @$ydata; $j++)
+        {
+            print DATA " $$ydata[$j][$i]";
+        }
+        print DATA "\n";
+    }
+    close(DATA);
+
+    # Construst using statement for date-time data
+    my $using = '';
+    if (defined $ds->{timefmt})
+    {
+        my ($xTmp) = (ref($$xdata[0]) eq 'ARRAY')? ($$xdata[0][0]):
+            ($$xdata[0]);
+        my @a = split(/\s+/, $xTmp);
+        my $yCol = scalar(@a) + 1;
+        $using = "1:$yCol";
+    }
+    return($using);
+}
+
+
+# Process input data of array of x and y for plotting style "xyerror..."
+sub _thawXYXYError
+{
+    my ($ds) = @_;
+
+    my $xdata = $ds->{xdata};
+    my $ydata = $ds->{ydata};
+
+    # Write data into temp file
+    my $fileTmp = $ds->{_data};
+    open(DATA, ">$fileTmp") || confess("Can't write data to temp file");
+    if (scalar(@$xdata) == scalar(@$ydata))
+    {
+        for (my $i = 0; $i < @{$$xdata[0]}; $i++)
+        {
+            print DATA "$$xdata[0][$i] $$ydata[0][$i]";
+            for (my $j = 1; $j < @$ydata; $j++)
+            {
+                print DATA " $$xdata[$j][$i] $$ydata[$j][$i]";
+            }
+            print DATA "\n";
+        }
+    }
+    else
+    {
+        for (my $i = 0; $i < @{$$xdata[0]}; $i++)
+        {
+            print DATA "$$xdata[0][$i] $$ydata[0][$i]";
+            if (scalar(@$xdata) == 2)
+            {
+                my $ltmp = $$xdata[0][$i] - $$xdata[1][$i]*0.5;
+                my $htmp = $$xdata[0][$i] + $$xdata[1][$i]*0.5;
+                print DATA " $ltmp $htmp ".
+                    "$$ydata[1][$i] $$ydata[2][$i]\n";
+            }
+            else
+            {
+                my $ltmp = $$ydata[0][$i] - $$ydata[1][$i]*0.5;
+                my $htmp = $$ydata[0][$i] - $$ydata[1][$i]*0.5;
+                print DATA " $$xdata[1][$i] $$xdata[2][$i] ".
+                    "$ltmp $htmp\n";
+            }
+        }
+    }
+    close(DATA);
+    
+    # Construst using statement for date-time data
+    my $using = '';
+    if (defined $ds->{timefmt})
+    {
+        my ($xTmp) = (ref($$xdata[0]) eq 'ARRAY')? ($$xdata[0][0]):
+            ($$xdata[0]);
+        my @a = split(/\s+/, $xTmp);
+        my $yCol = scalar(@a) + 1;
+        $using = "1:$yCol";
+    }
+    return($using);
+}
+
+
+# Process input data of array of x and y for plotting financial time series
+sub _thawXYFinance
+{
+    my ($ds) = @_;
+
+    my $xdata = $ds->{xdata};
+    my $ydata = $ds->{ydata};
+    croak("x-data and y-data have unequal length") if
+        (scalar(@{$$ydata[0]}) != scalar(@$xdata));
+
+    # Write data into temp file
+    my $fileTmp = $ds->{_data};
+    open(DATA, ">$fileTmp") || confess("Can't write data to temp file");
+    for (my $i = 0; $i < @$xdata; $i++)
+    {
+        print DATA "$$xdata[$i] $$ydata[0][$i] $$ydata[1][$i] ".
+            "$$ydata[2][$i] $$ydata[3][$i]\n";
+    }
+    close(DATA);
+
+    # Construst using statement for date-time data
+    my $using = '';
+    if (defined $ds->{timefmt})
+    {
+        my @a = split(/\s+/, $$xdata[0]);
+        my $yCol = scalar(@a) + 1;
+        $using = "1:".join(':', ($yCol .. $yCol+3));
+    }
+    return($using);
+}
+
+
+# Process input data of arrays of x and y for plottiny style "hlines"
+sub _thawXYHlines
+{
+    my ($ds) = @_;
+    my $xdata = $ds->{xdata};
+    my $ydata = $ds->{ydata};
+
+    # Write data into temp file
+    my $fileTmp = $ds->{_data};
+    open(DATA, ">$fileTmp") || confess("Can't write data to temp file");
+    for (my $i = 0; $i < @$xdata; $i++)
+    {
+        print DATA "0 $$ydata[$i] 0 $$xdata[$i] $$ydata[$i] ".
+            "$$ydata[$i]\n";
+    }
+    close(DATA);
+    $ds->{style} = "boxxyerrorbars";
+}
+
+
+# Process input data of arrays of x and y for plottiny style "hbars"
+sub _thawXYHbars
+{
+    my ($ds) = @_;
+    my $xdata = $ds->{xdata};
+    my $ydata = $ds->{ydata};
+
+    # Put the corrdinates in a hash
+    my %points;
+    for (my $i = 0; $i < @$xdata; $i++)
+    {
+        $points{$$xdata[$i]} = $$ydata[$i];
+    }
+
+    # Sort x and y according to y values
+    my (@sortX, @sortY) = ();
+    foreach my $sx (sort {$points{$a} <=> $points{$b}} keys %points)
+    {
+        push(@sortX, $sx);
+        push(@sortY, $points{$sx});
+    }
+
+    my $ylow = my $yhigh = $sortY[0];
+    if (scalar(@sortY) > 1)
+    {
+        $ylow = 0.5*(3*$sortY[0]-$sortY[1]);
+        $yhigh = 0.5*(3*$sortY[-1]-$sortY[-2]);
+    }
+
+    # Write data into temp file
+    my $fileTmp = $ds->{_data};
+    open(DATA, ">$fileTmp") || confess("Can't write data to temp file");
+    for (my $i = 0; $i < @$xdata; $i++)
+    {
+        $ylow = 0.5*($sortY[$i]+$sortY[$i-1]) if ($i > 0);
+        $yhigh = ($i < $#sortY)?
+            0.5*($sortY[$i]+$sortY[$i+1]) :
+            2.0*$sortY[$i] - $ylow;
+        print DATA "0 $sortY[$i] 0 $sortX[$i] $ylow $yhigh\n";
+    }
+    close(DATA);
+    $ds->{style} = "boxxyerrorbars";
+}
+
+
+# Process input data of arrays of x and y for plottiny style "histograms"
+sub _thawXYHistograms
+{
+    my ($ds) = @_;
+    my $xdata = $ds->{xdata};
+    my $ydata = $ds->{ydata};
+    croak("x-data and y-data have unequal length") if
+        (scalar(@$ydata) != scalar(@$xdata));
+    my $using;
+
+    # Write data into temp file
+    my $fileTmp = $ds->{_data};
+    open(DATA, ">$fileTmp") || confess("Can't write data to temp file");
+    if (ref($$ydata[0]) eq 'ARRAY')
+    {
+        for (my $i = 0; $i < @$xdata; $i++)
+        {
+            print DATA "\"$$xdata[$i]\" " . join(' ', @{$$ydata[$i]}) . "\n";
+        }
+        $using = join(':', (2 .. scalar(@{$$ydata[0]})+1)) . ":xticlabels(1)";
+    }
+    else
+    {
+        for (my $i = 0; $i < @$xdata; $i++)
+        {
+            print DATA "\"$$xdata[$i]\" $$ydata[$i]\n";
+        }
+        $using = "2:xticlabels(1)";
+    }
+    close(DATA);
+
+    return($using);
+}
+
+
+# Process input data of array of x, y and z
+sub _thawXYZ
+{
+    my ($ds) = @_;
+
+    my $xdata = $ds->{xdata};
+    my $ydata = $ds->{ydata};
+    my $zdata = $ds->{zdata};
+    croak("x-data and y-data have unequal length") if
+        (scalar(@$ydata) != scalar(@$xdata));
+    croak("y-data and z-data have unequal length") if
+        (scalar(@$ydata) != scalar(@$zdata));
+
+    # Write data into temp file
+    my $fileTmp = $ds->{_data};
+    open(DATA, ">$fileTmp") || confess("Can't write data to temp file");
+    for (my $i = 0; $i < @$xdata; $i++)
+    {
+        print DATA "$$xdata[$i] $$ydata[$i] $$zdata[$i]\n";
+    }
+    close(DATA);
+
+    # Construst using statement for date-time data
+    my $using = '';
+    if (defined $ds->{timefmt})
+    {
+        my @a = split(/\s+/, $$xdata[0]);
+        my $yCol = scalar(@a) + 1;
+        $using = "1:$yCol";
+
+        my @b = split(/\s+/, $$ydata[0]);
+        my $zCol = scalar(@b) + $yCol;
+        $using .= ":$zCol";
+    }
+    return($using);
+}
+
+
+# Process input data of matrice of x, y and z
+sub _thawXYZGrid
+{
+    my ($ds) = @_;
+
+    my $xdata = $ds->{xdata};
+    my $ydata = $ds->{ydata};
+    my $zdata = $ds->{zdata};
+    croak("x-data and y-data have unequal length") if
+        (scalar(@$ydata) != scalar(@$xdata));
+    croak("y-data and z-data have unequal length") if
+        (scalar(@$ydata) != scalar(@$zdata));
+
+    # Write data into temp file
+    my $fileTmp = $ds->{_data};
+    open(DATA, ">$fileTmp") || confess("Can't write data to temp file");
+    for (my $i = 0; $i < @$xdata; $i++)
+    {
+        for (my $j = 0; $j < @{$$xdata[$i]}; $j++)
+        {
+            print DATA "$$xdata[$i][$j] $$ydata[$i][$j] $$zdata[$i][$j]\n";
+        }
+        print DATA "\n";
+    }
+    close(DATA);
+
+    # Construst using statement for date-time data
+    my $using = '';
+    if (defined $ds->{timefmt})
+    {
+        my @a = split(/\s+/, $$xdata[0][0]);
+        my $yCol = scalar(@a) + 1;
+        $using = "1:$yCol";
+
+        my @b = split(/\s+/, $$ydata[0][0]);
+        my $zCol = scalar(@b) + $yCol;
+        $using .= ":$zCol";
+    }
+    return($using);
+}
+
+
+# Process input data of array of points
+sub _thawPoints
+{
+    my ($ds) = @_;
+
+    # Write data into temp file
+    my $pt = $ds->{points};
+    my $fileTmp = $ds->{_data};
+    open(DATA, ">$fileTmp") || confess("Can't write data to temp file");
+    for (my $i = 0; $i < @$pt; $i++)
+    {
+        print DATA join(" ", @{$$pt[$i]}), "\n";
+    }
+    close(DATA);
+
+    # Construst using statement for date-time data
+    my $using = '';
+    if (defined $ds->{timefmt})
+    {
+        my $col = 1;
+        $using = "1";
+        for (my $i = 0; $i < @{$$pt[0]}-1; $i++)
+        {
+            my @a = split(/\s+/, $$pt[0][$i]);
+            $col += scalar(@a);
+            $using .= ":$col";
+        }
+    }
+    return($using);
+}
+
+
+# Process input data of array of points for plotting style "hlines"
+sub _thawPointsHLines
+{
+    my ($ds) = @_;
+    confess("Data/time input data is not supported in hlines plotting style")
+        if (defined $ds->{timefmt});
+
+    # Write data into temp file
+    my $pt = $ds->{points};
+    my $fileTmp = $ds->{_data};
+    open(DATA, ">$fileTmp") || confess("Can't write data to temp file");
+
+    # hlines plotting style
+    for (my $i = 0; $i < @$pt; $i++)
+    {
+        print DATA "0 $$pt[$i][1] 0 $$pt[$i][0] $$pt[$i][1] $$pt[$i][1]\n";
+    }
+
+    $ds->{style} = "boxxyerrorbars";
+    close(DATA);
+}
+
+
+# Process input data of array of points for plotting style "hbars"
+sub _thawPointsHBars
+{
+    my ($ds) = @_;
+    confess("Data/time input data is not supported in hbars plotting style")
+        if (defined $ds->{timefmt});
+
+    my $pt = $ds->{points};
+
+    # Put the corrdinates in a hash
+    my %points;
+    for (my $i = 0; $i < @$pt; $i++)
+    {
+        $points{$$pt[$i][0]} = $$pt[$i][1];
+    }
+
+    # Sort x and y according to y values
+    my (@sortX, @sortY) = ();
+    foreach my $sx (sort {$points{$a} <=> $points{$b}} keys %points)
+    {
+        push(@sortX, $sx);
+        push(@sortY, $points{$sx});
+    }
+
+    my $ylow = my $yhigh = $sortY[0];
+    if (scalar(@sortY) > 1)
+    {
+        $ylow = 0.5*(3*$sortY[0]-$sortY[1]);
+        $yhigh = 0.5*(3*$sortY[-1]-$sortY[-2]);
+    }
+
+    # Write data into temp file
+    my $fileTmp = $ds->{_data};
+    open(DATA, ">$fileTmp") || confess("Can't write data to temp file");
+    for (my $i = 0; $i < @$pt; $i++)
+    {
+        $ylow = 0.5*($sortY[$i]+$sortY[$i-1]) if ($i > 0);
+        $yhigh = ($i < $#sortY)?
+            0.5*($sortY[$i]+$sortY[$i+1]) :
+            2.0*$sortY[$i] - $ylow;
+        print DATA "0 $sortY[$i] 0 $sortX[$i] $ylow $yhigh\n";
+    }
+    close(DATA);
+
+    $ds->{style} = "boxxyerrorbars";
+    close(DATA);
+}
+
+
+# Process input data of array of points for plotting histograms
+sub _thawPointsHistograms
+{
+    my ($ds) = @_;
+
+    # Write data into temp file
+    my $pt = $ds->{points};
+    my $fileTmp = $ds->{_data};
+    open(DATA, ">$fileTmp") || confess("Can't write data to temp file");
+    my $numCol = scalar(@{$$pt[0]});
+    for (my $i = 0; $i < @$pt; $i++)
+    {
+        print DATA "\"$$pt[$i][0]\" ", join(' ', @{$$pt[$i]}[1 .. $numCol-1]),
+            "\n";
+    }
+    close(DATA);
+
+    my $using = join(':', (2 .. $numCol)) . ":xticlabels(1)";
+    return($using);
+}
+
+
+# Process input data of a matrix of points
+sub _thawPointsGrid
+{
+    my ($ds) = @_;
+
+    # Write data into temp file
+    my $pt = $ds->{points};
+    my $fileTmp = $ds->{_data};
+    open(DATA, ">$fileTmp") || confess("Can't write data to temp file");
+    for (my $i = 0; $i < @$pt; $i++)
+    {
+        for (my $j = 0; $j < @{$$pt[$i]}; $j++)
+        {
+            print DATA join(" ", @{$$pt[$i][$j]}), "\n";
+        }
+        print DATA "\n";
+    }
+    close(DATA);
+
+    # Construst using statement for date-time data
+    my $using = '';
+    if (defined $ds->{timefmt})
+    {
+        my $col = 1;
+        $using = "1";
+        for (my $i = 0; $i < @{$$pt[0][0]}-1; $i++)
+        {
+            my @a = split(/\s+/, $$pt[0][0][$i]);
+            $col += scalar(@a);
+            $using .= ":$col";
+        }
+    }
+    return($using);
 }
 
 
@@ -2551,8 +3035,14 @@ means that the x-axis and y2-axis are data/time axes.
 
 =head3 border
 
-Border of the graph. Properties supported are "sides", "linetype", "width", and
-"color". E.g.
+Border of the graph. Properties supported are:
+
+    sides    : sides on which border is displayed
+    linetype : line type
+    width    : line width
+    color    : line coler
+
+E.g.
 
     border => {
         sides    => "bottom, left",
@@ -2594,18 +3084,18 @@ any border.
 Major grid lines. E.g.
 
     grid => {
-        type  => 'dash',
-        width => 2,
+        linetype => 'dash',
+        width    => 2,
         ....
     }
 
 Supported properties are:
 
-    type   : line type of the grid lines (default: dot)
-    width  : line width (defaulr: 0)
-    color  : line color (default: black)
-    xlines : whether the vertical grid lines are drawn (on/off)
-    ylines : whether the horizontal grid lines are drawn (on/off)
+    linetype : line type of the grid lines (default: dot)
+    width    : line width (defaulr: 0)
+    color    : line color (default: black)
+    xlines   : whether the vertical grid lines are drawn (on/off)
+    ylines   : whether the horizontal grid lines are drawn (on/off)
 
 =head3 tmargin, bmargin
 
@@ -2652,7 +3142,7 @@ Time stamp of the plot. To place the time stamp with default setting,
 
     timestamp => 'on'
 
-To set the format of the time stamp as well, e.g.,
+Properties of the time stamp (such as date-time format) can also be set, e.g.
 
     timestamp => {
        fmt    => '%d/%m/%y %H:%M',
@@ -2660,10 +3150,16 @@ To set the format of the time stamp as well, e.g.,
        font   => "Helvetica",
     }
 
-=head3 bg (experimental)
+Supported properties are:
+
+    fmt    : date-time format
+    offset : offset relative to the default position
+    font   : font face (and optionally font size)
+
+=head3 bg
 
 Background color of the chart. This option has no effect in the sub-chart of
-multiplot and is experimental. E.g.
+multiplot. E.g. to give the chart a yellow background,
 
     bg => "yellow"
 
@@ -2679,10 +3175,10 @@ Supported properties are:
     color   : color (name ot RRGGBB value)
     density : density of the coloring
 
-=head3 plotbg (experimental)
+=head3 plotbg
 
-Background color of the plot area. This option has no effect in 3D plots and is
-experimental. See L<bg>.
+Background color of the plot area. This option has no effect in 3D plots. See
+L<bg> for supported properties.
 
 =head3 gnuplot
 
@@ -2706,6 +3202,24 @@ The default value is C<postscript enhanced color>. Terminal is not necessarily
 related to the output image format. E.g., you may use gif terminal and then
 convert the image format to jpg by the L<convert()> method.
 
+=head2 Chart Options Not Mentioned Above
+
+If Chart::Gnuplot encounters options not mentions above, it would convert them
+to Gnuplot set statements. E.g. if the chart object is
+
+    $chart = Chart::Gnuplot->new(
+        ...
+        foo => "FOO",
+    );
+
+the generated Gnuplot statements would be:
+
+    ...
+    set foo FOO
+
+This mechanism lets Chart::Gnuplot support many features not mentioned above
+(such as "cbrange", "samples", "view" and so on).
+
 =head2 Chart Methods
 
 =head3 new
@@ -2721,6 +3235,14 @@ General set methods for arbitrary number of options.
 
     $chart->set(%options);
 
+E.g.
+
+    $chart->set(view => '30,60');
+
+will be translated to the Gnuplot statement
+
+    set view 30,60
+
 =head3 plot2d
 
     $chart->plot2d(@dataSets);
@@ -2733,7 +3255,7 @@ object.
     $chert->plot3d(@dataSets);
 
 Plot the data sets in a 3D chart. Each dataset is represented by a dataset
-object. It is not yet completed. Only basic features are supported.
+object.
 
 =head3 multiplot
 
@@ -2745,10 +3267,12 @@ Plot multiple charts in the same image.
 
 Create animated gif. E.g.
 
+    # Create (main) chart object
     my $chart = Chart::Gnuplot->new(
         output => "animate.gif",
     );
 
+    # Add frames to the (main) chart object
     my $T = 30; # number of frames
     my @c;
     for (my $i = 0; $i < $T; $i++)
@@ -2760,6 +3284,7 @@ Create animated gif. E.g.
         $c[$i]->add2d($ds);
     }
 
+    # Create animation
     $chart->animate(
         charts => \@c,
         delay  => 10,   # delay 0.1 sec between successive images
@@ -2799,6 +3324,18 @@ Add an arbitrary text label. e.g.,
         pointcolor => "blue",
     );
 
+Supported properties are:
+
+    text       : label text
+    position   : position of the label
+    offset     : offset relative to the default position
+    rotate     : rotation in degrees
+    font       : font face (and optionally font size)
+    fontcolor  : color of the text
+    pointtype  : point type
+    pointsize  : point size
+    pointcolor : point color
+
 =head3 arrow
 
 Draw arbitrary arrow. e.g.,
@@ -2815,6 +3352,43 @@ Draw arbitrary arrow. e.g.,
         },
     );
 
+Supported properties are:
+
+    from     : starting position
+    to       : ending position (position of the arrow head)
+    rto      : ending position relative to the starting position
+    linetype : line type
+    width    : line width
+    color    : color
+    head     : arrow head
+
+Supported properties of the arrow head are:
+
+    size      : size of the head
+    angle     : angle (in degree) between the arrow and the head branch
+    direction : head direction ('back', 'both' or 'off')
+
+=head3 line
+
+Draw arbitrary straight line. e.g.,
+
+    $chart->line(
+        from     => "0,2",
+        to       => "0.3,0.1",
+        linetype => 'dash',
+        width    => 2,
+        color    => "dark-blue",
+    );
+
+Supported properties are:
+
+    from     : starting position
+    to       : ending position (position of the arrow head)
+    rto      : ending position relative to the starting position
+    linetype : line type
+    width    : line width
+    color    : color
+
 =head3 rectangle
 
 Draw arbitrary rectangle. e.g.,
@@ -2826,8 +3400,20 @@ Draw arbitrary rectangle. e.g.,
             density => 0.2,
             color   => "#11ff11",
         },
-        border => {color => "blue"},
+        border    => {color => "blue"},
+        linewidth => 3,
+        layer     => 'front',
+        index     => 1,
     );
+
+Most properties of a rectangle can be classified into location, dimension,
+filling and border. Location and dimension of the rectangle can be specified by
+C<from> and C<to>, or C<from> and C<rto>, or C<at>, C<width> and C<height>.
+Filling can be specified by C<color> and C<density>, or C<pattern>. Border has
+only one property C<color> so far. Besides, C<linewidth> controls the line
+width of the border as well as the filling pattern. The layer that the
+rectangle is drawn is set by C<layer>. The C<index> is a tag of the rectangle,
+which usually can be omitted.
 
 =head3 ellipse
 
@@ -2837,26 +3423,45 @@ Draw arbitrary ellipse. e.g.,
         at     => "screen 0.2, screen 0.2",
         width  => 0.2,
         height => 0.5
-        fill   => {
-            density => 0.2,
-            color   => "#11ff11",
-        },
+        fill   => {pattern => 2},
         border => {color => "blue"},
     );
+
+The properties of C<ellipse> is the same as those of L<rectangle>, except that
+its location and dimension must be set by C<at>, C<width> and C<height>.
 
 =head3 circle
 
 Draw arbitrary circle. e.g.,
 
     $chart->circle(
-        at   => "screen 0.2, screen 0.2",
-        size => 0.5
-        fill => {
-            density => 0.2,
-            color   => "#11ff11",
-        },
+        at    => "screen 0.2, screen 0.2",
+        size  => 0.5
+        fill  => {pattern => 2},
+        layer => 'behind',
+    );
+
+The properties of C<circle> is the same as those of L<rectangle>, except that
+its location and dimension must be set by C<at>, C<width> and C<height>.
+
+=head3 polygon
+
+Draw arbitrary polygon. e.g.,
+
+    $chart->polygon(
+        vertices => [
+            " 0,  0.2",
+            "-2, -0.2",
+            {to  => "2, -0.3"},
+            {rto => "0, 0.3"},
+        ],
+        fill   => {pattern => 2},
         border => {color => "blue"},
     );
+
+The location and dimension of the polygon are specified by an array of
+C<vertices>. Except C<border>, C<pattern> of C<fill>, C<index> and C<layer>,
+other properties of rectangle is not supported.
 
 =head3 copy
 
@@ -2867,7 +3472,7 @@ chart with highly customized format. E.g.
         ...
     );
 
-    # $copy and $chart will have the same format
+    # $copy is a copy of $chart
     my $copy = $chart->copy;
 
 You may also make multiple copies . E.g.
@@ -2916,6 +3521,16 @@ Change the image format to PDF.
 
 Add a gnuplot command. This method is useful for the Gnuplot features that have
 not yet implemented.
+
+    $chart->command(\@gnuplotCommands);
+
+Add a list of gnuplot commands.
+
+=head3 execute
+
+Execute Gnuplot. Normally users do not need to call this method directly
+because this method would be called automatically by other methods such as
+L<plot2d>, L<multiplot> and L<animate>.
 
 =head1 DATASET OBJECT
 
@@ -3080,37 +3695,95 @@ The plotting style for the dataset, including
     candlesticks   : candle sticks for open, high, low and close price
     hbars          : horizontal bars (experimental)
     hlines         : horizontal lines (experimental)
+    vectors        : arrows
+    circles        : circles, for say, bubble charts
+    histograms     : for plotting histograms
+
+C<hbars> and C<hlines> are available only if the data is input from C<points>
+or C<(x,y)data>.
 
 =head3 color
 
-Color of the dataset in the plot. Can be a named color ot RBG (#RRGGBB) value.
+Color of the dataset in the plot. Can be a named color or RBG (#RRGGBB) value.
 The supported color names can be found in the file F<doc/colors.txt> in the
 distribution. E.g.
 
     color => "#99ccff"
-    # or
+
+is equivalent to
+
     color => "dark-red"
 
 =head3 width
 
-Line width used in the plot.
+Line width used in the plot. The default width is 1.
 
 =head3 linetype
 
-Line type.
+Line type. Can be an integer or line type name. The supported line type names
+can be found in the file F<doc/linetypes.txt> in the distribution. E.g.
+
+    linetype => 3
+
+is equivalent to
+
+    linetype => 'dash'
+
+Note: the line type may not be displayed as the name if C<terminal> is set and
+is not postscript.
 
 =head3 pointtype
 
-Point type.
+Point type. Can be an integer or point type name. The supported point type
+names can be found in the file F<doc/pointtypes.txt> in the distribution. E.g.
+
+    pointtype => 64
+
+is equivalent to
+
+    pointtype => 'square'
+
+Note: the point type may not be displayed as the name if C<terminal> is set and
+is not postscript.
 
 =head3 pointsize
 
-Point size of the plot.
+Point size of the plot. E.g.
+
+    pointsize => 3
+
+The default point size is 1.
 
 =head3 fill
 
-Filling string. Has effect only on plotting styles "boxes", "boxxyerrorbars"
-and "financebars".
+Filling the boxes. Has effect only on plotting styles with boxes, such as
+"boxes", "boxxyerrorbars" and "financebars". To fill with pattern,
+
+    fill => {
+        pattern => 1,
+    }
+
+C<pattern> may be an interger from 0 (no filling) to 7.
+
+To fill with solid,
+
+    fill => {
+        color   => '#33bb33',
+        density => 0.2,
+    }
+
+C<color> may be named color or RGB (#RRGGBB). C<density> may be a real number
+from 0 (empty) to 1.
+
+=head3 border
+
+Border of the boxes. Has effect only on plotting styles with boxes and if
+C<fill> is set. C<color> (either named color or RGB) is the only supported
+property. E.g.
+
+    border => {
+        color => 'blue',
+    }
 
 =head3 axes
 
@@ -3137,6 +3810,20 @@ Time format of the input data. The valid format are:
 The smooth method used in plotting data points. Supported methods include cubic
 splines (csplines), Bezier curve (bezier) and other. Please see Gnuplot manual
 for details.
+
+=head3 using
+
+The C<using> keyword of Gnuplot.
+
+=head3 every
+
+The C<every> keyword of Gnuplot. Has effect only if the data is input from
+C<datafile>.
+
+=head3 index
+
+The C<index> keyword of Gnuplot. Has effect only if the data is input from
+C<datafile>.
 
 =head2 Dataset Methods
 
@@ -3322,13 +4009,11 @@ y-axis.
 
 =item 1. Improve the manual.
 
-=item 2. Add more control to the 3D plots.
+=item 2. Add curve fitting method.
 
-=item 3. Add curve fitting method.
+=item 3. Improve the testsuite.
 
-=item 4. Improve the testsuite.
-
-=item 5. Reduce number of temporary files generated.
+=item 4. Reduce number of temporary files generated.
 
 =back
 

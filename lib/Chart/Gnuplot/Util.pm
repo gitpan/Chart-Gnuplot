@@ -106,8 +106,28 @@ sub _fillStyle
     if (ref($fill) eq 'HASH')
     {
 		my $style = "";
-        $style .= " solid $$fill{density}" if (defined $$fill{density});
-        $style .= " pattern $$fill{pattern}" if (defined $$fill{pattern});
+		if (defined $$fill{pattern})
+		{
+			$style .= " transparent" if (defined $$fill{alpha} &&
+				$$fill{alpha} == 0);
+			$style .= " pattern $$fill{pattern}";
+		}
+		else
+		{
+			if (defined $$fill{alpha})
+			{
+				$style .= " transparent solid $$fill{alpha}";
+			}
+			elsif (defined $$fill{density})
+			{
+        		$style .= " solid $$fill{density}";
+			}
+			else
+			{
+				$style .= " solid 1";
+			}
+		}
+
         $style .= " noborder" if (defined $$fill{border} &&
             $$fill{border} =~ /^(off|no)$/);
         return($style);
