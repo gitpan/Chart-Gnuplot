@@ -1,34 +1,43 @@
 Change log for Chart::Gnuplot
 
+0.21
+    - FIX the persistance of label and arrow over plots in multiplot
+          (Thanks to Dave Lee)
+    - FIX repeatedly unset and set logscale in multiplot
+          (Thanks to Dave Lee)
+    - FIX the persistance of shape (circles, rectangles, ...) over plots in
+          multiplot
+
 0.20
-   - NEW support drawing arbitrary polygons
-   - NEW support alpha value in filling styles and objects for certain terminals
-   - NEW chart object method "command" supports executing an array of commands
-   - NEW more test cases
-   - CHG automatically set "using" of the dataSet object in plotting histogram
-   - CHG code refactoring in Chart::Gnuplot::DataSet
-   - CHG make private method "_execute()" public
-   - CHG update POD
-   - FIX data processing of array of points in plotting 3D surface
-   - FIX data processing of plotting "hbars"
+    - NEW support drawing arbitrary polygons
+    - NEW support alpha value in filling styles and objects for certain
+          terminals
+    - NEW chart object method "command" supports executing an array of commands
+    - NEW more test cases
+    - CHG automatically set "using" of the dataSet object in plotting histogram
+    - CHG code refactoring in Chart::Gnuplot::DataSet
+    - CHG make private method "_execute()" public
+    - CHG update POD
+    - FIX data processing of array of points in plotting 3D surface
+    - FIX data processing of plotting "hbars"
 
 0.19
-   - NEW support drawing arbitrary rectangles, ellipses and circles
-   - NEW Perlish setting of arrow head of arbitary arrows
-   - NEW support filling pattern in box-type styles
-   - NEW support setting color for the border of the box-type styles
-   - NEW support curve fitting (experimental)
-   - CHG check OS using /MSWin/ instead of "MSWin32" for safty
-   - FIX grid options syntax error if the options are not in hash form
+    - NEW support drawing arbitrary rectangles, ellipses and circles
+    - NEW Perlish setting of arrow head of arbitary arrows
+    - NEW support filling pattern in box-type styles
+    - NEW support setting color for the border of the box-type styles
+    - NEW support curve fitting (experimental)
+    - CHG check OS using /MSWin/ instead of "MSWin32" for safty
+    - FIX grid options syntax error if the options are not in hash form
 
 0.18
-   - Add try to guess the path of the gnuplot executable in Windows
-     (Bug ID: 82525)
-   - CHG improve POD
-   - CHG use qq() instead of "" in Gnuplot command line construction
-     (Bug ID: 82525)
-   - CHG use qq() instead of "" in convert command line construction
-   - FIX offset and font options of the time stamp
+    - Add try to guess the path of the gnuplot executable in Windows
+      (Bug ID: 82525)
+    - CHG improve POD
+    - CHG use qq() instead of "" in Gnuplot command line construction
+      (Bug ID: 82525)
+    - CHG use qq() instead of "" in convert command line construction
+    - FIX offset and font options of the time stamp
 
 0.17
     - NEW control the display of arbitrary border of the graph

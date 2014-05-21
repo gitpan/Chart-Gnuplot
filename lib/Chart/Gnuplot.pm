@@ -5,7 +5,7 @@ use Carp;
 use File::Copy qw(move);
 use File::Temp qw(tempdir);
 use Chart::Gnuplot::Util qw(_lineType _pointType _borderCode _fillStyle _copy);
-$VERSION = '0.20';
+$VERSION = '0.21';
 
 # Constructor
 sub new
@@ -500,21 +500,30 @@ sub _setChart
     }
 
     # Write labels
+	my $isLabelSet = 0;
     foreach my $label (@{$self->{_labels}})
     {
         print PLT "set label"."$label\n";
+		push(@sets, "label") if ($isLabelSet == 0);
+		$isLabelSet = 1;
     }
 
     # Draw arrows
+	my $isArrowSet = 0;
     foreach my $arrow (@{$self->{_arrows}})
     {
         print PLT "set arrow"."$arrow\n";
+		push(@sets, "arrow") if ($isArrowSet == 0);
+		$isArrowSet = 1;
     }
 
     # Draw objects
+	my $isObjectSet = 0;
     foreach my $object (@{$self->{_objects}})
     {
         print PLT "set object"."$object\n";
+		push(@sets, "object") if ($isObjectSet == 0);
+		$isObjectSet = 1;
     }
     close(PLT);
 
@@ -1039,7 +1048,8 @@ sub _reset
         {
             print PLT "set $opt [*:*]\n";
         }
-        elsif (!grep(/^$opt$/, qw(grid object parametric)) && $opt !~ /tics$/)
+        elsif (!grep(/^$opt$/, qw(arrow grid label logscale object parametric))
+			&& $opt !~ /tics$/)
         {
             print PLT "set $opt\n";
         }
